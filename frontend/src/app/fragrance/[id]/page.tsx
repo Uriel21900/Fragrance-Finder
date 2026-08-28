@@ -20,7 +20,7 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
   const handleSetAlert = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:8000/api/alerts/subscribe', {
+      await axios.post('/api/alerts/subscribe', {
         email: alertEmail,
         dna_id: params.id,
         target_price: parseFloat(alertPrice)
@@ -36,7 +36,7 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
   useEffect(() => {
     async function fetchDetail() {
       try {
-        const res = await axios.get(`http://localhost:8000/api/fragrance/${params.id}`);
+        const res = await axios.get(`/api/fragrance/${params.id}`);
         setFragrance(res.data);
         if (res.data.image_url) {
           setImgSrc(res.data.image_url);

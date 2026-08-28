@@ -3,9 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import axios from 'axios';
-import Link from 'next/link';
 import FragranceCard from '@/components/FragranceCard';
-import GlassCard from '@/components/GlassCard';
 import SearchBar from '@/components/SearchBar';
 import { FragranceData, FragranceVariant, Price } from '@/types';
 
@@ -23,11 +21,11 @@ function SearchContent() {
     async function fetchSearch() {
       setLoading(true);
       try {
-        const url = new URL('http://localhost:8000/api/search');
-        if (q) url.searchParams.append('q', q);
-        if (brandFilter) url.searchParams.append('brand', brandFilter);
+        const params = new URLSearchParams();
+        if (q) params.append('q', q);
+        if (brandFilter) params.append('brand', brandFilter);
         
-        const res = await axios.get(url.toString());
+        const res = await axios.get(`/api/search?${params.toString()}`);
         setResults(res.data);
       } catch (err) {
         console.error("Search failed", err);

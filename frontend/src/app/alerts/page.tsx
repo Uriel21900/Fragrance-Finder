@@ -13,7 +13,7 @@ export default function AlertsPage() {
   useEffect(() => {
     async function fetchDeals() {
       try {
-        const res = await axios.get("http://localhost:8000/api/alerts/deals");
+        const res = await axios.get("/api/alerts/deals");
         setDeals(res.data);
       } catch (err) {
         console.error("Failed to fetch deals", err);

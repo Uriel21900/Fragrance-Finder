@@ -12,7 +12,7 @@ export default function TrendingPage() {
   useEffect(() => {
     async function fetchTrending() {
       try {
-        const res = await axios.get("http://localhost:8000/api/trending/influencers");
+        const res = await axios.get("/api/trending");
         setTrending(res.data);
       } catch (err) {
         console.error("Failed to fetch trending", err);

@@ -13,7 +13,7 @@ export default function BrandsPage() {
   useEffect(() => {
     async function fetchBrands() {
       try {
-        const res = await axios.get("http://localhost:8000/api/brands");
+        const res = await axios.get("/api/brands");
         setBrands(res.data);
       } catch (err) {
         console.error("Failed to fetch brands", err);

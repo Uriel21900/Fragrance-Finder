@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import FragranceCard from './FragranceCard';
 import { FragranceData, FragranceVariant, Price } from '@/types';
-import { Sparkles, Flame, Gem } from 'lucide-react';
+import { Flame } from 'lucide-react';
 
 export default function TrendingSection() {
   const [trending, setTrending] = useState<FragranceData[]>([]);
@@ -14,7 +14,7 @@ export default function TrendingSection() {
   useEffect(() => {
     async function fetchTrending() {
       try {
-        const res = await axios.get('http://localhost:8000/api/trending');
+        const res = await axios.get('/api/trending');
         setTrending(res.data);
       } catch (err) {
         console.error("Failed to fetch trending", err);
