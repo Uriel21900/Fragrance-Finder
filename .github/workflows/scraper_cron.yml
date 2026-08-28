@@ -27,5 +27,6 @@ jobs:
       - name: Run Scheduled Scraper & Price Tracker
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONUNBUFFERED: "1"
         run: |
           python backend/scripts/run_scheduled_scrapers.py

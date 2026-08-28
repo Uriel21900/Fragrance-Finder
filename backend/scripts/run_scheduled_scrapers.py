@@ -178,6 +178,7 @@ async def run_scraper():
                                     )
                                     session.add(obs)
                                     updated_count += 1
+                                    print(f"  [+] {ret['name']}: {dna.canonical_name} -> ${match['price']:.2f}", flush=True)
                                     
                                     # Check price drop alerts
                                     alert_stmt = select(FragranceAlert).where(
@@ -186,13 +187,14 @@ async def run_scraper():
                                     )
                                     alerts = (await session.execute(alert_stmt)).scalars().all()
                                     for al in alerts:
-                                        print(f"🚨 PRICE ALERT TRIGGERED: {dna.canonical_name} dropped to ${match['price']:.2f} (Target: ${al.target_price:.2f}) for {al.email}")
+                                        print(f"🚨 PRICE ALERT: {dna.canonical_name} dropped to ${match['price']:.2f} for {al.email}", flush=True)
                                     
                                     break # Recorded best match for this retailer
                     except Exception as err:
                         pass
                         
-                await session.commit()
+                if updated_count % 10 == 0:
+                    await session.commit()
                 
         print("=" * 60)
         print(f"COMPLETED SCRAPER RUN: Updated {updated_count} price observations.")
