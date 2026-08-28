@@ -17,7 +17,7 @@ from models.schema import (
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://user:password@localhost:5433/fragrance_finder"
+    "postgresql+asyncpg://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?ssl=require"
 )
 
 # Convert postgres:// or postgresql:// to postgresql+asyncpg:// if needed
@@ -25,6 +25,13 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 elif DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Handle SSL params for Neon and asyncpg
+if "?" in DATABASE_URL:
+    base, _ = DATABASE_URL.split("?", 1)
+    DATABASE_URL = f"{base}?ssl=require"
+elif "neon.tech" in DATABASE_URL:
+    DATABASE_URL = f"{DATABASE_URL}?ssl=require"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
