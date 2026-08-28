@@ -1,0 +1,10 @@
+{
+  "baseURL": "http://localhost:1234/v1",
+  "model": "obliteratus/qwen/qwen_qwen2.5-coder-7b-instruct-abliterated.gguf",
+  "other_models_you_can_use": [
+    "obliteratus/qwen/deepseek coder v2.gguf",
+    "obliteratus/qwen/command-r.gguf",
+    "obliteratus/qwen/dolphin llama 3 (2).gguf",
+    "obliteratus/qwen/dolphin mistral.gguf"
+  ]
+}

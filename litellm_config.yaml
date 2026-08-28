@@ -1,0 +1,9 @@
+model_list:
+  - model_name: "*"
+    litellm_params:
+      model: ollama/dolphin-llama3
+      api_base: http://localhost:11434
+      drop_params: true
+
+litellm_settings:
+  drop_params: true

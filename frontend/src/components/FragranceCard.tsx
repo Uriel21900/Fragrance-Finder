@@ -1,0 +1,110 @@
+"use client";
+import Link from 'next/link';
+import { Sparkles, ArrowRight } from 'lucide-react';
+
+interface FragranceCardProps {
+  id?: string;
+  brand: string;
+  name: string;
+  price: string;
+  concentration?: string;
+  cloneConfidence?: number;
+  isDupe?: boolean;
+  inspiredBy?: string;
+  imageUrl?: string;
+  marketSegment?: string;
+  storeCount?: number;
+}
+
+export default function FragranceCard({
+  id,
+  brand,
+  name,
+  price,
+  concentration = "EDP",
+  cloneConfidence,
+  isDupe,
+  inspiredBy,
+  imageUrl,
+  marketSegment,
+  storeCount,
+}: FragranceCardProps) {
+  const cardContent = (
+    <div className="glass glass-hover rounded-2xl p-4 flex flex-col relative overflow-hidden group cursor-pointer h-full border border-white/10 hover:border-gold/30 transition-all duration-300">
+      {/* Bottle Image Container */}
+      <div className="w-full h-48 rounded-xl overflow-hidden bg-black/40 border border-white/5 mb-4 relative flex items-center justify-center group-hover:border-gold/20 transition-all">
+        {imageUrl ? (
+          <img 
+            src={imageUrl} 
+            alt={name} 
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center text-white/30 gap-2">
+            <Sparkles size={28} className="text-gold/40" />
+            <span className="text-xs uppercase tracking-wider font-semibold">{brand}</span>
+          </div>
+        )}
+        
+        {/* Market Segment Badge */}
+        {marketSegment && (
+          <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-gold">
+            {marketSegment}
+          </div>
+        )}
+        
+        {/* Dupe Badge */}
+        {isDupe && (
+          <div className="absolute top-2 right-2 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-amber-300">
+            Dupe / Clone
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex justify-between items-start mb-1">
+            <span className="text-xs font-bold tracking-wider text-gold uppercase truncate max-w-[80%]">
+              {brand}
+            </span>
+            {storeCount !== undefined && storeCount > 0 && (
+              <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">
+                {storeCount} {storeCount === 1 ? 'store' : 'stores'}
+              </span>
+            )}
+          </div>
+          
+          <h3 className="text-base font-bold text-white group-hover:text-gold transition-colors line-clamp-1 mb-1">
+            {name}
+          </h3>
+          
+          {isDupe && inspiredBy && (
+            <p className="text-[11px] font-medium text-amber-200/80 mb-2 truncate">
+              Inspired by: <span className="text-white">{inspiredBy}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-end">
+          <div>
+            <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Lowest Price</p>
+            <p className="text-lg font-black text-white">{price}</p>
+          </div>
+          
+          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-gold group-hover:text-black transition-colors">
+            <ArrowRight size={14} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (id) {
+    return <Link href={`/fragrance/${id}`} className="block h-full">{cardContent}</Link>;
+  }
+
+  return cardContent;
+}
