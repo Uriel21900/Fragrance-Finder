@@ -1,5 +1,8 @@
 import asyncio
-from scrapers import Job, JomashopScraper, MacysScraper, FragFlexScraper
+from scrapers import Job, MacysScraper, FragFlexScraper
+from scrapers.generic import PerfumeSpotScraper
+from scrapers.shopify_json import ShopifyJsonScraper
+from scrapers.crawl4ai_scraper import Crawl4AIScraper
 
 async def main():
     print("=== STARTING CONTINUOUS SCRAPER DAEMON ===")
@@ -7,27 +10,30 @@ async def main():
     from database import async_session_maker
     from models.schema import FragranceDNA
     from sqlalchemy import select
-    from scrapers.generic import ShopifyScraper, PerfumeSpotScraper
     
     plugins = [
-        JomashopScraper(),
         MacysScraper(),
         FragFlexScraper(),
-        ShopifyScraper("Labelle", "https://labelleperfumes.com"),
-        ShopifyScraper("BestBrandsPerfume", "https://bestbrandsperfume.com"),
-        ShopifyScraper("ReblScents", "https://reblscents.com"),
-        ShopifyScraper("AuraFragrance", "https://www.aurafragrance.com"),
-        ShopifyScraper("BanadirFragrance", "https://banadirfragrance.com"),
-        ShopifyScraper("TripleTraders", "https://tripletraders.com"),
-        ShopifyScraper("PerfumeOnline.com", "https://perfumeonline.com"),
-        ShopifyScraper("ShopAromatix", "https://shoparomatix.com"),
-        ShopifyScraper("AromaConcepts", "https://www.aromaconcepts.com"),
-        ShopifyScraper("GiftExpress", "https://www.giftexpress.com"),
-        ShopifyScraper("AnauStore", "https://anaustore.com"),
-        ShopifyScraper("LRLux", "https://lrlux.com"),
-        ShopifyScraper("BeautyHouse", "https://beautyhouse.com"),
-        ShopifyScraper("FragranceShop", "https://fragranceshop.com"),
-        PerfumeSpotScraper()
+        PerfumeSpotScraper(),
+        
+        # Protected / Dynamic sites using Crawl4AI + Gemini
+        Crawl4AIScraper("Jomashop", "https://jomashop.com", "https://www.jomashop.com/fragrances.html?q={query}"),
+        Crawl4AIScraper("AuraFragrance", "https://www.aurafragrance.com", "https://www.aurafragrance.com/search?q={query}"),
+        Crawl4AIScraper("ReblScents", "https://reblscents.com", "https://reblscents.com/search?q={query}"),
+        
+        # Shopify standard sites using JSON API
+        ShopifyJsonScraper("Labelle", "https://labelleperfumes.com"),
+        ShopifyJsonScraper("BestBrandsPerfume", "https://bestbrandsperfume.com"),
+        ShopifyJsonScraper("BanadirFragrance", "https://banadirfragrance.com"),
+        ShopifyJsonScraper("TripleTraders", "https://tripletraders.com"),
+        ShopifyJsonScraper("PerfumeOnline.com", "https://perfumeonline.com"),
+        ShopifyJsonScraper("ShopAromatix", "https://shoparomatix.com"),
+        ShopifyJsonScraper("AromaConcepts", "https://www.aromaconcepts.com"),
+        ShopifyJsonScraper("GiftExpress", "https://www.giftexpress.com"),
+        ShopifyJsonScraper("AnauStore", "https://anaustore.com"),
+        ShopifyJsonScraper("LRLux", "https://lrlux.com"),
+        ShopifyJsonScraper("BeautyHouse", "https://beautyhouse.com"),
+        ShopifyJsonScraper("FragranceShop", "https://fragranceshop.com"),
     ]
     
     while True:

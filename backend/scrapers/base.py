@@ -2,14 +2,23 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-import nodriver as uc
+try:
+    import nodriver as uc
+except Exception:
+    uc = None
 
-from database import async_session_maker
-from models.schema import (
-    Brand, FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, Retailer, PriceObservation,
-    FragranceMarketSegment, FragranceGenderMarketing
-)
+try:
+    from database import async_session_maker
+    from models.schema import (
+        Brand, FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, Retailer, PriceObservation,
+        FragranceMarketSegment, FragranceGenderMarketing
+    )
+except ImportError:
+    from backend.database import async_session_maker
+    from backend.models.schema import (
+        Brand, FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, Retailer, PriceObservation,
+        FragranceMarketSegment, FragranceGenderMarketing
+    )
 
 @dataclass
 class Job:

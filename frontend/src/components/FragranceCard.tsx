@@ -10,9 +10,14 @@ interface FragranceCardProps {
   concentration?: string;
   cloneConfidence?: number;
   isDupe?: boolean;
+  is_dupe?: boolean;
   inspiredBy?: string;
+  inspired_by?: string;
+  target?: string;
   imageUrl?: string;
+  image_url?: string;
   marketSegment?: string;
+  market_segment?: string;
   storeCount?: number;
 }
 
@@ -24,18 +29,28 @@ export default function FragranceCard({
   concentration = "EDP",
   cloneConfidence,
   isDupe,
+  is_dupe,
   inspiredBy,
+  inspired_by,
+  target,
   imageUrl,
+  image_url,
   marketSegment,
+  market_segment,
   storeCount,
 }: FragranceCardProps) {
+  const isDupeActive = Boolean(isDupe ?? is_dupe);
+  const targetName = inspiredBy || inspired_by || target || "Target";
+  const displayImage = imageUrl || image_url;
+  const displaySegment = marketSegment || market_segment;
+
   const cardContent = (
     <div className="glass glass-hover rounded-2xl p-4 flex flex-col relative overflow-hidden group cursor-pointer h-full border border-white/10 hover:border-gold/30 transition-all duration-300">
       {/* Bottle Image Container */}
       <div className="w-full h-48 rounded-xl overflow-hidden bg-black/40 border border-white/5 mb-4 relative flex items-center justify-center group-hover:border-gold/20 transition-all">
-        {imageUrl ? (
+        {displayImage ? (
           <img 
-            src={imageUrl} 
+            src={displayImage} 
             alt={name} 
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             onError={(e) => {
@@ -50,16 +65,17 @@ export default function FragranceCard({
         )}
         
         {/* Market Segment Badge */}
-        {marketSegment && (
+        {displaySegment && (
           <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-gold">
-            {marketSegment}
+            {displaySegment}
           </div>
         )}
         
         {/* Dupe Badge */}
-        {isDupe && (
-          <div className="absolute top-2 right-2 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-amber-300">
-            Dupe / Clone
+        {isDupeActive && (
+          <div className="absolute top-2 right-2 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-amber-300 flex items-center gap-1">
+            <Sparkles size={10} className="text-amber-400" />
+            <span>Dupe / Clone</span>
           </div>
         )}
       </div>
@@ -80,22 +96,26 @@ export default function FragranceCard({
           <h3 className="text-base font-bold text-white group-hover:text-gold transition-colors line-clamp-1 mb-1">
             {name}
           </h3>
-          
-          {isDupe && inspiredBy && (
-            <p className="text-[11px] font-medium text-amber-200/80 mb-2 truncate">
-              Inspired by: <span className="text-white">{inspiredBy}</span>
-            </p>
-          )}
         </div>
 
-        <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-end">
-          <div>
-            <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Lowest Price</p>
-            <p className="text-lg font-black text-white">{price}</p>
-          </div>
-          
-          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-gold group-hover:text-black transition-colors">
-            <ArrowRight size={14} />
+        <div className="mt-4 pt-3 border-t border-white/10 flex flex-col">
+          <div className="flex justify-between items-start mb-1">
+            <div className="flex flex-col min-w-0 pr-2">
+              <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Lowest Price</p>
+              <p className="text-lg font-black text-white">{price}</p>
+              {isDupeActive && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300 shadow-sm backdrop-blur-sm max-w-full">
+                  <Sparkles size={11} className="text-amber-400 shrink-0" />
+                  <span className="truncate">
+                    Inspired by: <strong className="text-white font-semibold">{targetName}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-gold group-hover:text-black transition-colors shrink-0 mt-1">
+              <ArrowRight size={14} />
+            </div>
           </div>
         </div>
       </div>

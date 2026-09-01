@@ -201,3 +201,18 @@ class FragranceAlert(Base):
     target_price = Column(Numeric(12, 2), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+class QuarantineReview(Base):
+    __tablename__ = 'quarantine_reviews'
+    review_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    clone_brand = Column(Text, nullable=False)
+    clone_name = Column(Text, nullable=False)
+    claimed_target = Column(Text, nullable=True)
+    reason = Column(Text, nullable=False)
+    confidence_score = Column(Numeric(5, 4), default=0.50)
+    source_url = Column(Text, nullable=True)
+    raw_payload = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, default='pending')
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
