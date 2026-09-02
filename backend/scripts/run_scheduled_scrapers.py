@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import select, update, insert
+from sqlalchemy import select, update, insert, or_
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.schema import (
@@ -15,25 +15,28 @@ from models.schema import (
     Retailer, PriceObservation, FragranceAlert
 )
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
+DEFAULT_DATABASE_URL = (
     "postgresql+asyncpg://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?ssl=require"
 )
 
-# Convert postgres:// or postgresql:// to postgresql+asyncpg:// if needed
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-elif DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+def format_async_db_url(raw_url: str | None) -> str:
+    url = (raw_url or "").strip() or DEFAULT_DATABASE_URL
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+    # Handle SSL params for asyncpg
+    if "sslmode=" in url:
+        url = url.replace("sslmode=require", "ssl=require").replace("sslmode=prefer", "ssl=prefer")
+    elif "?" in url and "ssl=" not in url:
+        url = f"{url}&ssl=require"
+    elif "?" not in url:
+        url = f"{url}?ssl=require"
+    return url
 
-# Handle SSL params for Neon and asyncpg
-if "?" in DATABASE_URL:
-    base, _ = DATABASE_URL.split("?", 1)
-    DATABASE_URL = f"{base}?ssl=require"
-elif "neon.tech" in DATABASE_URL:
-    DATABASE_URL = f"{DATABASE_URL}?ssl=require"
-
-engine = create_async_engine(DATABASE_URL, echo=False)
+DATABASE_URL = format_async_db_url(os.getenv("DATABASE_URL"))
+engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 HEADERS = {
@@ -43,11 +46,11 @@ HEADERS = {
 }
 
 RETAILERS = [
-    {"name": "perfumeonline.com", "url": "https://perfumeonline.com"},
-    {"name": "aurafragrance.com", "url": "https://aurafragrance.com"},
-    {"name": "reblscents.com", "url": "https://reblscents.com"},
-    {"name": "banadirfragrance.com", "url": "https://banadirfragrance.com"},
-    {"name": "shoparomatix.com", "url": "https://shoparomatix.com"}
+    {"name": "PerfumeOnline.com", "normalized": "perfumeonline_com", "url": "https://perfumeonline.com"},
+    {"name": "Aura Fragrance", "normalized": "aurafragrance_com", "url": "https://aurafragrance.com"},
+    {"name": "ReblScents", "normalized": "reblscents_com", "url": "https://reblscents.com"},
+    {"name": "Banadir Fragrance", "normalized": "banadirfragrance_com", "url": "https://banadirfragrance.com"},
+    {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"}
 ]
 
 CLONE_DISQUALIFIERS = [
@@ -79,7 +82,7 @@ async def scrape_shopify_search(client: httpx.AsyncClient, base_url: str, query:
     search_url = f"{base_url}/search/suggest.json?q={query}&resources[type]=product&resources[options][unavailable_products]=hide"
     results = []
     try:
-        resp = await client.get(search_url, headers=HEADERS, timeout=10.0)
+        resp = await client.get(search_url, headers=HEADERS, timeout=8.0)
         if resp.status_code == 200:
             data = resp.json()
             products = data.get("resources", {}).get("results", {}).get("products", [])
@@ -90,11 +93,11 @@ async def scrape_shopify_search(client: httpx.AsyncClient, base_url: str, query:
                 if url.startswith("/"):
                     url = f"{base_url}{url}"
                 results.append({"title": title, "price": price, "url": url})
-    except Exception as e:
+    except Exception:
         # Fallback to HTML search if suggest json is unavailable
         try:
             html_url = f"{base_url}/search?q={query}"
-            resp = await client.get(html_url, headers=HEADERS, timeout=10.0)
+            resp = await client.get(html_url, headers=HEADERS, timeout=8.0)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 items = soup.select('.grid__item, .product-item, .product-card, .card')
@@ -122,63 +125,89 @@ async def run_scraper():
     print("=" * 60)
     
     async with async_session() as session:
-        # Ensure retailers exist in DB
+        # 1. Fetch all existing retailers and build lookup map
+        res = await session.execute(select(Retailer))
+        existing_retailers = {r.normalized_name: r for r in res.scalars().all()}
         retailer_map = {}
+        
         for ret in RETAILERS:
-            r_obj = (await session.execute(select(Retailer).where(Retailer.name == ret["name"]))).scalars().first()
+            norm = ret["normalized"]
+            r_obj = existing_retailers.get(norm)
+            if not r_obj:
+                r_obj = existing_retailers.get(norm.replace("_com", ""))
+            if not r_obj:
+                domain_part = ret["url"].replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
+                for r in existing_retailers.values():
+                    if r.website_url and domain_part in r.website_url:
+                        r_obj = r
+                        break
+                    if r.name and r.name.lower() == ret["name"].lower():
+                        r_obj = r
+                        break
+                        
             if not r_obj:
                 r_obj = Retailer(
                     name=ret["name"],
-                    normalized_name=ret["name"].replace(".", "_"),
+                    normalized_name=norm,
                     website_url=ret["url"]
                 )
                 session.add(r_obj)
                 await session.flush()
+                existing_retailers[norm] = r_obj
+                
             retailer_map[ret["name"]] = r_obj.retailer_id
+            retailer_map[ret["url"]] = r_obj.retailer_id
+            retailer_map[norm] = r_obj.retailer_id
+            print(f"Mapped retailer: {ret['name']} -> {r_obj.retailer_id}")
             
         await session.commit()
         
-        # Query tracked fragrances
-        stmt = select(FragranceDNA, Brand).join(Brand, FragranceDNA.origin_brand_id == Brand.brand_id)
-        fragrances = (await session.execute(stmt)).all()
+        # 2. Query tracked fragrances joined with primary variant
+        stmt = (
+            select(FragranceDNA, Brand, ProductVariant)
+            .join(Brand, FragranceDNA.origin_brand_id == Brand.brand_id)
+            .join(FragranceLine, FragranceLine.dna_id == FragranceDNA.dna_id)
+            .join(FragranceProduct, FragranceProduct.line_id == FragranceLine.line_id)
+            .join(ProductVariant, ProductVariant.product_id == FragranceProduct.product_id)
+            .order_by(FragranceDNA.canonical_name)
+        )
+        rows = (await session.execute(stmt)).all()
         
-        print(f"Found {len(fragrances)} fragrances to track in database.")
+        # Deduplicate to primary variant per DNA
+        unique_fragrances = {}
+        for dna, brand, variant in rows:
+            if dna.dna_id not in unique_fragrances:
+                unique_fragrances[dna.dna_id] = (dna, brand, variant)
+                
+        fragrance_list = list(unique_fragrances.values())
+        print(f"Found {len(fragrance_list)} unique fragrances with variants to track.")
         
         async with httpx.AsyncClient(follow_redirects=True) as client:
             updated_count = 0
             
-            for dna, brand in fragrances:
+            for idx, (dna, brand, variant) in enumerate(fragrance_list, 1):
                 query = f"{brand.name} {dna.canonical_name}".strip()
                 
-                # Fetch product variant
-                var_stmt = (
-                    select(ProductVariant)
-                    .join(FragranceProduct, ProductVariant.product_id == FragranceProduct.product_id)
-                    .join(FragranceLine, FragranceProduct.line_id == FragranceLine.line_id)
-                    .where(FragranceLine.dna_id == dna.dna_id)
-                )
-                variant = (await session.execute(var_stmt)).scalars().first()
-                if not variant:
-                    continue
-                    
                 for ret in RETAILERS:
                     try:
                         matches = await scrape_shopify_search(client, ret["url"], query)
                         for match in matches:
                             if is_authentic_match(match["title"], brand.name, dna.canonical_name, dna.is_dupe):
                                 if match["price"] and match["price"] > 10.0:
-                                    # Insert new price observation
+                                    now = datetime.datetime.now(datetime.timezone.utc)
                                     obs = PriceObservation(
                                         variant_id=variant.variant_id,
-                                        retailer_id=retailer_map[ret["name"]],
+                                        retailer_id=retailer_map.get(ret["name"]) or retailer_map.get(ret["url"]),
+                                        observed_at=now,
+                                        captured_at=now,
                                         price_amount=match["price"],
                                         currency_code="USD",
                                         source_url=match["url"],
-                                        captured_at=datetime.datetime.now(datetime.timezone.utc)
+                                        availability="in_stock"
                                     )
                                     session.add(obs)
                                     updated_count += 1
-                                    print(f"  [+] {ret['name']}: {dna.canonical_name} -> ${match['price']:.2f}", flush=True)
+                                    print(f"  [{idx}/{len(fragrance_list)}] [+] {ret['name']}: {dna.canonical_name} -> ${match['price']:.2f}", flush=True)
                                     
                                     # Check price drop alerts
                                     alert_stmt = select(FragranceAlert).where(
@@ -193,12 +222,16 @@ async def run_scraper():
                     except Exception as err:
                         pass
                         
-                if updated_count % 10 == 0:
+                if updated_count > 0 and updated_count % 10 == 0:
                     await session.commit()
+            
+            # Final commit for remaining updates
+            await session.commit()
                 
         print("=" * 60)
-        print(f"COMPLETED SCRAPER RUN: Updated {updated_count} price observations.")
+        print(f"COMPLETED SCRAPER RUN: Recorded {updated_count} new price observations.")
         print("=" * 60)
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
+
