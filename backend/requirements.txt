@@ -137,6 +137,7 @@ wrapt==2.3.0
 xxhash==3.8.1
 agent-reach>=0.1.0
 browser-use>=0.13.0
+langchain-google-genai>=2.0.0
 scrapling>=0.4.0
 curl_cffi>=0.16.0
 browserforge>=1.2.0

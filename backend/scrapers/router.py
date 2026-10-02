@@ -24,13 +24,16 @@ import asyncpg
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-# Try local imports or package imports
+# Try relative package imports first (when used as a package),
+# then fall back to absolute imports (when run directly as a script).
 try:
     from .ai_parser import parse_markdown, ParsedFragrance
     from .verifier import verify_parsed_fragrance_async, VerificationResult
 except ImportError:
-    from ai_parser import parse_markdown, ParsedFragrance
-    from verifier import verify_parsed_fragrance_async, VerificationResult
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from ai_parser import parse_markdown, ParsedFragrance  # type: ignore[import-not-found]
+    from verifier import verify_parsed_fragrance_async, VerificationResult  # type: ignore[import-not-found]
 
 # Load environment configuration
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -714,6 +717,8 @@ async def route_and_scrape(target: str, limit: int = 50, force_tier: Optional[in
         db_url = db_url.replace("postgres://", "postgresql://", 1)
 
     pool = await asyncpg.create_pool(dsn=db_url, min_size=1, max_size=5)
+    if pool is None:
+        raise RuntimeError("asyncpg.create_pool() returned None — check DATABASE_URL and SSL settings.")
     try:
         db_stats = await NeonDatabaseSync.batch_upsert(pool, records)
     finally:
