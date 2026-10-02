@@ -8,21 +8,29 @@ on:
 
 jobs:
   scrape_prices:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install httpx beautifulsoup4 asyncpg sqlalchemy pydantic greenlet python-dotenv
+          pip install \
+            httpx \
+            beautifulsoup4 \
+            asyncpg \
+            "sqlalchemy>=2.0" \
+            pydantic \
+            greenlet \
+            python-dotenv
 
       - name: Run Scheduled Scraper & Price Tracker
         env:

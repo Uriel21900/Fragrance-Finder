@@ -15,12 +15,13 @@ from models.schema import (
     Retailer, PriceObservation, FragranceAlert
 )
 
-DEFAULT_DATABASE_URL = (
-    "postgresql+asyncpg://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?ssl=require"
-)
-
 def format_async_db_url(raw_url: str | None) -> str:
-    url = (raw_url or "").strip() or DEFAULT_DATABASE_URL
+    if not (raw_url or "").strip():
+        raise RuntimeError(
+            "DATABASE_URL environment variable is not set. "
+            "Add it as a GitHub Actions secret named DATABASE_URL."
+        )
+    url = raw_url.strip()
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
