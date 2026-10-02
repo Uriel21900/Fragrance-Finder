@@ -57,26 +57,60 @@ RETAILERS = [
 CLONE_DISQUALIFIERS = [
     "inspired by", "our version of", "impression of", "type of", "dupe of",
     "perfume oil", "body oil", "pocket spray", "sample vial", "decant",
-    "twist of", "smells like", "fragrance oil"
+    "twist of", "smells like", "fragrance oil", "vial", "sample"
 ]
+
+# Short stop-words that appear in many fragrance names and shouldn't count
+# as a match on their own (e.g. "de", "la", "the", "by")
+_NAME_STOP_WORDS = {"de", "la", "le", "les", "du", "the", "by", "for", "and",
+                    "eau", "parfum", "extrait", "cologne", "toilette"}
+
+def _significant_tokens(text: str) -> list[str]:
+    """Return lowercase alphabetic tokens longer than 2 chars, ignoring stop-words."""
+    return [
+        t for t in re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
+        if len(t) > 2 and t not in _NAME_STOP_WORDS
+    ]
 
 def is_authentic_match(title: str, query_brand: str, query_name: str, is_dupe_target: bool) -> bool:
     title_lower = title.lower()
-    
-    # If we are scraping for an authentic fragrance, exclude clones and oils
+
+    # --- 1. Exclude clone/oil disqualifiers for authentic fragrances ---
     if not is_dupe_target:
         for disq in CLONE_DISQUALIFIERS:
             if disq in title_lower:
                 return False
-        
-        # Check brand name presence if provided
-        if query_brand.lower() not in title_lower:
-            # Check known brand variants
-            if query_brand.lower() == "parfums de marly" and "pdm" not in title_lower:
-                return False
-            elif query_brand.lower() == "maison francis kurkdjian" and "mfk" not in title_lower:
-                return False
-    
+
+    # --- 2. Brand must be present (with known abbreviation aliases) ---
+    brand_lower = query_brand.lower()
+    brand_found = brand_lower in title_lower
+    if not brand_found:
+        aliases = {
+            "parfums de marly": ["pdm"],
+            "maison francis kurkdjian": ["mfk"],
+            "jo malone": ["jo malone london"],
+            "yves saint laurent": ["ysl"],
+            "maison margiela replica": ["margiela", "replica"],
+        }
+        for canon, alts in aliases.items():
+            if brand_lower == canon:
+                brand_found = any(a in title_lower for a in alts)
+                break
+    if not brand_found:
+        return False
+
+    # --- 3. Fragrance NAME must also be present in the title ---
+    # Require at least half of the significant name tokens to appear in the
+    # title. This catches "Layton" correctly while tolerating minor wording
+    # differences (e.g. "Baccarat Rouge 540" vs "540 Baccarat Rouge").
+    name_tokens = _significant_tokens(query_name)
+    if name_tokens:
+        title_tokens = set(_significant_tokens(title))
+        matched = sum(1 for t in name_tokens if t in title_tokens)
+        required = max(1, len(name_tokens) // 2 + len(name_tokens) % 2)  # ceil(n/2)
+        if matched < required:
+            return False
+
     return True
 
 async def scrape_shopify_search(client: httpx.AsyncClient, base_url: str, query: str):
