@@ -702,10 +702,12 @@ async def route_and_scrape(target: str, limit: int = 50, force_tier: Optional[in
                     ))
 
     # --- NEON DATABASE INGESTION ---
-    db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-    )
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError(
+            "DATABASE_URL environment variable is not set. "
+            "Configure it in your .env file or GitHub Actions secrets."
+        )
     if db_url.startswith("postgresql+asyncpg://"):
         db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
     elif db_url.startswith("postgres://"):

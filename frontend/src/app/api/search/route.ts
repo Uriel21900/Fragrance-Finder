@@ -7,10 +7,16 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q') || '';
   const brand = searchParams.get('brand') || '';
+  // Only include inspired_by matches when the caller explicitly opts in
+  // (e.g. a "Find clones of X" feature). Default OFF to prevent
+  // cross-contamination where searching "Layton" returns clones of Layton
+  // instead of Layton itself.
+  const includeInspiredBy = searchParams.get('include_inspired_by') === 'true';
 
   try {
     let dnas = [];
     const searchPattern = `%${q.trim()}%`;
+    const exactName = q.trim();
 
     if (q && brand) {
       dnas = await sql`
@@ -27,8 +33,18 @@ export async function GET(request: Request) {
           b.name as brand_name
         FROM fragrance_dna d
         LEFT JOIN brand b ON d.origin_brand_id = b.brand_id
-        WHERE (d.canonical_name ILIKE ${searchPattern} OR b.name ILIKE ${searchPattern} OR d.inspired_by ILIKE ${searchPattern})
+        WHERE (
+            d.canonical_name ILIKE ${searchPattern}
+            OR b.name ILIKE ${searchPattern}
+            ${includeInspiredBy ? sql`OR d.inspired_by ILIKE ${searchPattern}` : sql``}
+          )
           AND b.name ILIKE ${'%' + brand + '%'}
+        ORDER BY
+          CASE WHEN LOWER(d.canonical_name) = LOWER(${exactName}) THEN 0
+               WHEN d.canonical_name ILIKE ${searchPattern}        THEN 1
+               ELSE 2
+          END,
+          d.canonical_name
         LIMIT 24
       `;
     } else if (q) {
@@ -46,9 +62,15 @@ export async function GET(request: Request) {
           b.name as brand_name
         FROM fragrance_dna d
         LEFT JOIN brand b ON d.origin_brand_id = b.brand_id
-        WHERE d.canonical_name ILIKE ${searchPattern} 
+        WHERE d.canonical_name ILIKE ${searchPattern}
            OR b.name ILIKE ${searchPattern}
-           OR d.inspired_by ILIKE ${searchPattern}
+           ${includeInspiredBy ? sql`OR d.inspired_by ILIKE ${searchPattern}` : sql``}
+        ORDER BY
+          CASE WHEN LOWER(d.canonical_name) = LOWER(${exactName}) THEN 0
+               WHEN d.canonical_name ILIKE ${searchPattern}        THEN 1
+               ELSE 2
+          END,
+          d.canonical_name
         LIMIT 24
       `;
     } else if (brand) {
@@ -67,6 +89,7 @@ export async function GET(request: Request) {
         FROM fragrance_dna d
         LEFT JOIN brand b ON d.origin_brand_id = b.brand_id
         WHERE b.name ILIKE ${'%' + brand + '%'}
+        ORDER BY d.canonical_name
         LIMIT 24
       `;
     } else {
