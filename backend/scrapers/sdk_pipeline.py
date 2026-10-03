@@ -77,12 +77,15 @@ async def create_db_pool() -> asyncpg.Pool:
     """Create asyncpg connection pool to Neon PostgreSQL."""
     db_url = get_database_url()
     logger.info("Initializing asyncpg connection pool to Neon...")
-    return await asyncpg.create_pool(
+    pool = await asyncpg.create_pool(
         dsn=db_url,
         min_size=1,
         max_size=10,
         command_timeout=30.0
     )
+    if pool is None:
+        raise RuntimeError("Failed to create asyncpg connection pool")
+    return pool
 
 
 # ==========================================

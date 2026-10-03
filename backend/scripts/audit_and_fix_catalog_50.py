@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+from typing import Any
 from sqlalchemy import select, delete, text
 from urllib.parse import urlparse
 
@@ -947,8 +948,9 @@ async def sync_50_catalog():
                 session.add(r_obj)
                 await session.flush()
             else:
-                r_obj.name = rname
-                r_obj.website_url = rurl
+                r_obj_any: Any = r_obj
+                r_obj_any.name = rname
+                r_obj_any.website_url = rurl
             retailer_db_map[norm] = r_obj
 
         # 2. Iterate through each fragrance in the 50 catalog
@@ -999,10 +1001,11 @@ async def sync_50_catalog():
                 session.add(dna)
                 await session.flush()
             else:
-                dna.image_url = fimg
-                dna.market_segment = fseg
-                dna.is_dupe = False
-                dna.origin_brand_id = brand_obj.brand_id
+                dna_any: Any = dna
+                dna_any.image_url = fimg
+                dna_any.market_segment = fseg
+                dna_any.is_dupe = False
+                dna_any.origin_brand_id = brand_obj.brand_id
                 
             # Ensure Line and Product
             line_res = await session.execute(
@@ -1112,9 +1115,10 @@ async def sync_50_catalog():
                     session.add(c_dna)
                     await session.flush()
                 else:
-                    c_dna.image_url = clone_img
-                    c_dna.is_dupe = True
-                    c_dna.inspired_by = f"{bname} {fname}"
+                    c_dna_any: Any = c_dna
+                    c_dna_any.image_url = clone_img
+                    c_dna_any.is_dupe = True
+                    c_dna_any.inspired_by = f"{bname} {fname}"
 
                 # Link in dna_relationship
                 rel_res = await session.execute(

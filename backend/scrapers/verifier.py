@@ -88,7 +88,8 @@ async def verify_parsed_fragrance_async(
             },
         )
         if hasattr(response, 'parsed') and response.parsed:
-            return response.parsed
+            if isinstance(response.parsed, VerificationResult):
+                return response.parsed
     except Exception as e:
         logger.warning(f"[Verifier] GenAI fallback error: {e}")
 

@@ -493,6 +493,8 @@ async def run_community_discovery(target_houses: Optional[List[str]] = None) -> 
         db_url = db_url.replace("postgres://", "postgresql://", 1)
 
     pool = await asyncpg.create_pool(dsn=db_url, min_size=1, max_size=5)
+    if pool is None:
+        raise RuntimeError("Failed to create asyncpg connection pool")
     try:
         db_stats = await CommunityDupeSync.sync_to_neon(pool, all_discovered_dupes)
     finally:

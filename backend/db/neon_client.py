@@ -8,7 +8,7 @@ import json
 import logging
 import os
 import uuid
-import psutil
+import psutil  # type: ignore
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import asyncpg

@@ -3,6 +3,7 @@ import sys
 import asyncio
 import re
 import datetime
+from typing import Any
 from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
@@ -14,9 +15,10 @@ from models.schema import (
     FragranceDNA, Brand, FragranceLine, FragranceProduct, ProductVariant, 
     Retailer, PriceObservation, FragranceAlert
 )
+from scrapers.strict_matcher import is_strict_match, clean_source_url
 
 def format_async_db_url(raw_url: str | None) -> str:
-    if not (raw_url or "").strip():
+    if not raw_url or not raw_url.strip():
         raise RuntimeError(
             "DATABASE_URL environment variable is not set. "
             "Add it as a GitHub Actions secret named DATABASE_URL."
@@ -47,11 +49,23 @@ HEADERS = {
 }
 
 RETAILERS = [
-    {"name": "PerfumeOnline.com", "normalized": "perfumeonline_com", "url": "https://perfumeonline.com"},
-    {"name": "Aura Fragrance", "normalized": "aurafragrance_com", "url": "https://aurafragrance.com"},
+    {"name": "Jomashop", "normalized": "jomashop_com", "url": "https://jomashop.com"},
+    {"name": "FragFlex", "normalized": "fragflex_com", "url": "https://fragflex.com"},
+    {"name": "Labelle Perfumes", "normalized": "labelle_com", "url": "https://labelleperfumes.com"},
+    {"name": "Best Brands Perfume", "normalized": "bestbrandsperfume_com", "url": "https://bestbrandsperfume.com"},
+    {"name": "The Perfume Spot", "normalized": "theperfumespot_com", "url": "https://theperfumespot.com"},
     {"name": "ReblScents", "normalized": "reblscents_com", "url": "https://reblscents.com"},
+    {"name": "Aura Fragrance", "normalized": "aurafragrance_com", "url": "https://aurafragrance.com"},
     {"name": "Banadir Fragrance", "normalized": "banadirfragrance_com", "url": "https://banadirfragrance.com"},
-    {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"}
+    {"name": "Triple Traders", "normalized": "tripletraders_com", "url": "https://tripletraders.com"},
+    {"name": "PerfumeOnline.com", "normalized": "perfumeonline_com", "url": "https://perfumeonline.com"},
+    {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"},
+    {"name": "Aroma Concepts", "normalized": "aromaconcepts_com", "url": "https://aromaconcepts.com"},
+    {"name": "Anau Store", "normalized": "anaustore_com", "url": "https://anaustore.com"},
+    {"name": "LR LUX", "normalized": "lrlux_com", "url": "https://lrlux.com"},
+    {"name": "BeautyHouse", "normalized": "beautyhouse_com", "url": "https://beautyhouse.com"},
+    {"name": "Gift Express", "normalized": "giftexpress_com", "url": "https://giftexpress.com"},
+    {"name": "Fragrance Shop", "normalized": "fragranceshop_com", "url": "https://fragranceshop.com"},
 ]
 
 CLONE_DISQUALIFIERS = [
@@ -145,7 +159,8 @@ async def scrape_shopify_search(client: httpx.AsyncClient, base_url: str, query:
                         p_match = re.search(r'[\d,\.]+', price_elem.text)
                         if p_match:
                             pr = float(p_match.group().replace(',', ''))
-                            u = link_elem.get('href', '')
+                            href_val = link_elem.get('href', '')
+                            u = str(href_val) if href_val else ''
                             if u.startswith('/'):
                                 u = f"{base_url}{u}"
                             results.append({"title": t, "price": pr, "url": u})
@@ -162,7 +177,7 @@ async def run_scraper():
     async with async_session() as session:
         # 1. Fetch all existing retailers and build lookup map
         res = await session.execute(select(Retailer))
-        existing_retailers = {r.normalized_name: r for r in res.scalars().all()}
+        existing_retailers: dict[str, Any] = {str(r.normalized_name): r for r in res.scalars().all()}
         retailer_map = {}
         
         for ret in RETAILERS:
@@ -173,10 +188,10 @@ async def run_scraper():
             if not r_obj:
                 domain_part = ret["url"].replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
                 for r in existing_retailers.values():
-                    if r.website_url and domain_part in r.website_url:
+                    if r.website_url and domain_part in str(r.website_url):
                         r_obj = r
                         break
-                    if r.name and r.name.lower() == ret["name"].lower():
+                    if r.name and str(r.name).lower() == ret["name"].lower():
                         r_obj = r
                         break
                         
@@ -227,9 +242,20 @@ async def run_scraper():
                     try:
                         matches = await scrape_shopify_search(client, ret["url"], query)
                         for match in matches:
-                            if is_authentic_match(match["title"], brand.name, dna.canonical_name, dna.is_dupe):
-                                if match["price"] and match["price"] > 10.0:
+                            is_match, reason = is_strict_match(
+                                candidate_title=str(match["title"]),
+                                candidate_url=str(match["url"]),
+                                candidate_price=float(match["price"]) if match["price"] else None,
+                                target_brand=str(brand.name),
+                                target_fragrance=str(dna.canonical_name),
+                                is_dupe_target=bool(dna.is_dupe),
+                                require_full_bottle=True
+                            )
+                            if not is_match:
+                                continue
+                            if match["price"] and match["price"] > 10.0:
                                     now = datetime.datetime.now(datetime.timezone.utc)
+                                    clean_u = clean_source_url(str(match["url"]))
                                     obs = PriceObservation(
                                         variant_id=variant.variant_id,
                                         retailer_id=retailer_map.get(ret["name"]) or retailer_map.get(ret["url"]),
@@ -237,7 +263,7 @@ async def run_scraper():
                                         captured_at=now,
                                         price_amount=match["price"],
                                         currency_code="USD",
-                                        source_url=match["url"],
+                                        source_url=clean_u,
                                         availability="in_stock"
                                     )
                                     session.add(obs)

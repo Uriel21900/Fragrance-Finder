@@ -260,7 +260,7 @@ class InteractiveVariantPath:
                 from browser_use import Agent as BrowserAgent
                 from langchain_google_genai import ChatGoogleGenerativeAI
 
-                llm = ChatGoogleGenerativeAI(
+                llm: Any = ChatGoogleGenerativeAI(
                     model="gemini-1.5-flash",
                     google_api_key=api_key
                 )

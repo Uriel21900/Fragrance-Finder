@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Any
 from sqlalchemy import select
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,14 +12,14 @@ except Exception:
     uc = None
 
 try:
-    from database import async_session_maker
-    from models.schema import (
+    from backend.database import async_session_maker
+    from backend.models.schema import (
         Brand, FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, Retailer, PriceObservation,
         FragranceMarketSegment, FragranceGenderMarketing
     )
 except ImportError:
-    from backend.database import async_session_maker
-    from backend.models.schema import (
+    from database import async_session_maker
+    from models.schema import (
         Brand, FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, Retailer, PriceObservation,
         FragranceMarketSegment, FragranceGenderMarketing
     )
@@ -47,11 +47,14 @@ class BaseScraper:
     RETAILER_URL = "https://unknown.com"
 
     def __init__(self):
-        self.browser: Optional[uc.Browser] = None
+        self.browser: Optional[Any] = None
 
     async def start_browser(self):
         if not self.browser:
-            self.browser = await uc.start(headless=True)
+            if uc is not None:
+                self.browser = await uc.start(headless=True)
+            else:
+                raise RuntimeError("nodriver is not installed or available")
 
     async def stop_browser(self):
         if self.browser:
@@ -217,8 +220,8 @@ class BaseScraper:
                     continue
                     
                 if getattr(sp, 'is_dupe', False) and getattr(sp, 'inspired_by', None):
-                    dna.is_dupe = True
-                    dna.inspired_by = sp.inspired_by
+                    setattr(dna, 'is_dupe', True)
+                    setattr(dna, 'inspired_by', sp.inspired_by)
 
                 volume_ml = getattr(sp, 'volume_ml', None) or self.extract_volume_ml(sp.title) or 100.0
                 concentration = getattr(sp, 'concentration', None) or self.extract_concentration(sp.title)

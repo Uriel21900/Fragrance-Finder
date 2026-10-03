@@ -7,7 +7,7 @@ import os
 import re
 import json
 import logging
-from typing import List, Optional
+from typing import List, Optional, cast
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("ai_parser")
@@ -101,7 +101,8 @@ def parse_markdown(markdown_content: str, search_term: str = "", target_brand: s
             },
         )
         if hasattr(response, 'parsed') and response.parsed:
-            return response.parsed
+            if isinstance(response.parsed, list):
+                return cast(List[ParsedFragrance], response.parsed)
     except Exception as e:
         logger.warning(f"[AI Parser] Error parsing with google-genai: {e}")
 

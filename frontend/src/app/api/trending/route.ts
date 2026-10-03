@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { isStrictMatch, cleanSourceUrl } from '@/lib/strict-matcher';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +40,10 @@ export async function GET() {
       WHERE d.canonical_name = ANY(${FEATURED_POPULAR_NAMES})
     `;
 
-    // Sort according to FEATURED_POPULAR_NAMES
-    const dnaMap = new Map(dnas.map((d: any) => [d.canonical_name, d]));
-    const sortedDnas = FEATURED_POPULAR_NAMES.map(name => dnaMap.get(name)).filter(Boolean);
+    // Map by dna_id and by canonical_name
+    const dnaById = new Map(dnas.map((d: any) => [d.dna_id, d]));
+    const dnaByName = new Map(dnas.map((d: any) => [d.canonical_name, d]));
+    const sortedDnas = FEATURED_POPULAR_NAMES.map(name => dnaByName.get(name)).filter(Boolean);
 
     // 2. Fetch prices for each DNA
     const dnaIds = sortedDnas.map((d: any) => d.dna_id);
@@ -71,18 +73,49 @@ export async function GET() {
       ORDER BY p.price_amount ASC
     `;
 
-    // Group price rows by dna_id and variant_id
+    // Group price rows by dna_id and variant_id with strict matching
     const pricesByDna: Record<string, any[]> = {};
     for (const row of priceRows) {
+      if (!row.source_url) continue;
+      const dna = dnaById.get(row.dna_id);
+      if (!dna) continue;
+
+      const priceAmount = parseFloat(row.price_amount);
+      const isMatch = isStrictMatch(
+        row.source_url,
+        row.source_url,
+        priceAmount,
+        dna.brand_name || '',
+        dna.canonical_name || '',
+        Boolean(dna.is_dupe),
+        true
+      );
+      if (!isMatch) continue;
+
+      let rName = row.retailer_name;
+      if (!rName || rName === 'Unknown') {
+        try {
+          rName = new URL(row.source_url).hostname.replace('www.', '');
+        } catch {
+          rName = 'Retailer';
+        }
+      }
+
+      const cleanUrl = cleanSourceUrl(row.source_url);
       if (!pricesByDna[row.dna_id]) {
         pricesByDna[row.dna_id] = [];
       }
+
+      // Deduplicate by retailer name or URL
+      const alreadyHas = pricesByDna[row.dna_id].some((p: any) => p.source_url === cleanUrl);
+      if (alreadyHas) continue;
+
       pricesByDna[row.dna_id].push({
         price_observation_id: row.price_observation_id,
-        retailer_name: row.retailer_name || 'Retailer',
-        price_amount: parseFloat(row.price_amount),
+        retailer_name: rName,
+        price_amount: priceAmount,
         currency_code: row.currency_code,
-        source_url: row.source_url,
+        source_url: cleanUrl,
         captured_at: row.captured_at,
         volume_ml: row.volume_ml ? parseFloat(row.volume_ml) : null,
         package_type: row.package_type

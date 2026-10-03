@@ -70,6 +70,9 @@ CREATE INDEX IF NOT EXISTS idx_domain_metrics_status ON domain_metrics(domain, s
 
 async def run_migration():
     db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is not set")
+
     if db_url.startswith("postgresql+asyncpg://"):
         db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
     elif db_url.startswith("postgres://"):

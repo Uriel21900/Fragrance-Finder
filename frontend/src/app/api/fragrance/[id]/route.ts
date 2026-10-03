@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { isStrictMatch, cleanSourceUrl } from '@/lib/strict-matcher';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,30 +53,42 @@ export async function GET(request: Request, { params }: { params: { id: string }
       ORDER BY p.price_amount ASC
     `;
 
-    // Deduplicate prices per retailer and source_url
+    // Deduplicate prices per retailer and source_url with strict matching
     const latestPrices = new Map();
     for (const row of priceRows) {
+      if (!row.source_url) continue;
+
+      const priceAmount = parseFloat(row.price_amount);
+      const isMatch = isStrictMatch(
+        row.source_url,
+        row.source_url,
+        priceAmount,
+        dna.brand_name || '',
+        dna.canonical_name || '',
+        Boolean(dna.is_dupe),
+        true
+      );
+      if (!isMatch) continue;
+
       let rName = row.retailer_name;
       if (!rName || rName === 'Unknown') {
-        if (row.source_url) {
-          try {
-            const urlObj = new URL(row.source_url);
-            rName = urlObj.hostname.replace('www.', '');
-          } catch {
-            rName = 'Retailer';
-          }
-        } else {
+        try {
+          const urlObj = new URL(row.source_url);
+          rName = urlObj.hostname.replace('www.', '');
+        } catch {
           rName = 'Retailer';
         }
       }
-      const key = `${rName}-${row.source_url}`;
+
+      const cleanUrl = cleanSourceUrl(row.source_url);
+      const key = `${rName}-${cleanUrl}`;
       if (!latestPrices.has(key) || new Date(row.captured_at) > new Date(latestPrices.get(key).captured_at)) {
         latestPrices.set(key, {
           price_observation_id: row.price_observation_id,
           retailer_name: rName,
-          price_amount: parseFloat(row.price_amount),
+          price_amount: priceAmount,
           currency_code: row.currency_code,
-          source_url: row.source_url,
+          source_url: cleanUrl,
           captured_at: row.captured_at,
           volume_ml: row.volume_ml ? parseFloat(row.volume_ml) : 100,
           package_type: row.package_type || 'spray'

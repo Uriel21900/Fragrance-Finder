@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List, Sequence
+from typing import List, Sequence, Any
 
 from database import get_db
 from models.schema import FragranceDNA, Brand, FragranceLine, FragranceProduct, ProductVariant, PriceObservation, Retailer, DNARelationship, FragranceAlert
@@ -14,6 +14,7 @@ import json
 router = APIRouter(prefix="/api")
 
 from urllib.parse import urlparse
+from scrapers.strict_matcher import is_url_valid_for_fragrance, clean_source_url
 
 async def _build_fragrance_response(db: AsyncSession, dnas: Sequence[FragranceDNA]) -> List[FragranceResponse]:
     response_data = []
@@ -45,34 +46,40 @@ async def _build_fragrance_response(db: AsyncSession, dnas: Sequence[FragranceDN
                     latest_prices = {}
                     for row in price_rows:
                         obs, r_name, r_url = row
-                        if not r_name or r_name == "Unknown":
-                            if obs.source_url:
-                                domain = urlparse(obs.source_url).netloc.lower().replace("www.", "")
-                                r_name = domain if domain else "Retailer"
-                            else:
-                                r_name = "Retailer"
+                        if not obs.source_url:
+                            continue
                         
-                        key = (r_name, obs.source_url)
+                        # Validate that retailer link matches the target fragrance (prevents showing Viking under Aventus, Delina under Layton)
+                        if not is_url_valid_for_fragrance(obs.source_url, str(dna.canonical_name), brand_name, bool(dna.is_dupe), price=float(obs.price_amount) if obs.price_amount else None):
+                            continue
+                            
+                        clean_u = clean_source_url(obs.source_url)
+                        if not r_name or r_name == "Unknown":
+                            domain = urlparse(clean_u).netloc.lower().replace("www.", "")
+                            r_name = domain.capitalize() if domain else "Retailer"
+                        
+                        key = (r_name, clean_u)
                         if key not in latest_prices or obs.captured_at > latest_prices[key][0].captured_at:
-                            latest_prices[key] = (obs, r_name)
+                            latest_prices[key] = (obs, r_name, clean_u)
                     
                     price_resps = []
-                    for (obs, r_name) in latest_prices.values():
+                    var_any: Any = var
+                    for (obs, r_name, clean_u) in latest_prices.values():
                         price_resps.append(PriceObservationResponse(
                             price_observation_id=str(obs.price_observation_id),
                             retailer_name=r_name,
                             currency_code=obs.currency_code,
                             price_amount=float(obs.price_amount),
-                            source_url=obs.source_url,
+                            source_url=clean_u,
                             captured_at=obs.captured_at,
-                            volume_ml=float(var.volume_ml) if var.volume_ml else None,
-                            package_type=str(var.package_type) if var.package_type else None
+                            volume_ml=float(var_any.volume_ml) if var_any.volume_ml else None,
+                            package_type=str(var_any.package_type) if var_any.package_type else None
                         ))
                     
                     variants_resp.append(VariantResponse(
-                        variant_id=str(var.variant_id),
-                        volume_ml=float(var.volume_ml), # type: ignore
-                        package_type=str(var.package_type),
+                        variant_id=str(var_any.variant_id),
+                        volume_ml=float(var_any.volume_ml),
+                        package_type=str(var_any.package_type),
                         prices=price_resps
                     ))
                     
@@ -85,24 +92,27 @@ async def _build_fragrance_response(db: AsyncSession, dnas: Sequence[FragranceDN
             .where(DNARelationship.target_dna_id == dna.dna_id)
         )
         rel_rows = (await db.execute(rel_stmt)).all()
-        for rel, clone_dna, clone_brand in rel_rows:
+        for rel, clone_dna_raw, clone_brand_raw in rel_rows:
+            clone_dna: Any = clone_dna_raw
+            clone_brand: Any = clone_brand_raw
             clones_resp.append(CloneResponse(
                 dna_id=str(clone_dna.dna_id),
-                brand_name=clone_brand.name,
-                canonical_name=clone_dna.canonical_name,
+                brand_name=str(clone_brand.name),
+                canonical_name=str(clone_dna.canonical_name),
                 image_url=clone_dna.image_url
             ))
                     
+        dna_any: Any = dna
         response_data.append(FragranceResponse(
-            dna_id=str(dna.dna_id),
+            dna_id=str(dna_any.dna_id),
             brand_name=brand_name,
-            canonical_name=str(dna.canonical_name),
-            market_segment=str(dna.market_segment.value if hasattr(dna.market_segment, 'value') else dna.market_segment),
-            first_release_year=dna.first_release_year,
-            is_dupe=dna.is_dupe,
-            inspired_by=dna.inspired_by,
-            influencer_mentions=dna.influencer_mentions,
-            image_url=dna.image_url,
+            canonical_name=str(dna_any.canonical_name),
+            market_segment=str(dna_any.market_segment.value if hasattr(dna_any.market_segment, 'value') else dna_any.market_segment),
+            first_release_year=int(dna_any.first_release_year) if dna_any.first_release_year is not None else None,
+            is_dupe=bool(dna_any.is_dupe),
+            inspired_by=str(dna_any.inspired_by) if dna_any.inspired_by else None,
+            influencer_mentions=str(dna_any.influencer_mentions) if dna_any.influencer_mentions else None,
+            image_url=str(dna_any.image_url) if dna_any.image_url else None,
             variants=variants_resp,
             clones=clones_resp
         ))
@@ -143,7 +153,7 @@ async def get_trending(db: AsyncSession = Depends(get_db), redis=Depends(get_red
     dnas = result.scalars().all()
     
     # Sort according to FEATURED_POPULAR_NAMES order
-    dna_map = {d.canonical_name: d for d in dnas}
+    dna_map = {str(d.canonical_name): d for d in dnas}
     sorted_dnas = [dna_map[name] for name in FEATURED_POPULAR_NAMES if name in dna_map]
     
     # If fewer than 8, fallback to any fragrances with images

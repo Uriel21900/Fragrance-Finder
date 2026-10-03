@@ -71,9 +71,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_asyncpg_pool(min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
     """Create asyncpg connection pool for high-performance batch upserts."""
-    return await asyncpg.create_pool(
+    pool = await asyncpg.create_pool(
         dsn=ASYNCPG_DSN,
         min_size=min_size,
         max_size=max_size,
         command_timeout=30.0
     )
+    if pool is None:
+        raise RuntimeError("Failed to create asyncpg connection pool")
+    return pool
