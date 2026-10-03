@@ -80,13 +80,20 @@ export function isStrictMatch(
   isDupeTarget: boolean = false,
   requireFullBottle: boolean = true
 ): boolean {
-  const titleLower = candidateTitle.toLowerCase();
+  let cleanTitle = candidateTitle.toLowerCase();
   let slug = candidateUrl.toLowerCase();
   try {
     const parsed = new URL(candidateUrl);
     slug = parsed.pathname.toLowerCase();
   } catch {
     slug = candidateUrl.toLowerCase().split("?")[0];
+  }
+  if (cleanTitle.startsWith("http://") || cleanTitle.startsWith("https://")) {
+    try {
+      cleanTitle = new URL(cleanTitle).pathname.toLowerCase();
+    } catch {
+      cleanTitle = cleanTitle.split("?")[0];
+    }
   }
 
   const brandLower = targetBrand.toLowerCase();
@@ -95,7 +102,7 @@ export function isStrictMatch(
   // Rule 1: Full bottle checks
   if (requireFullBottle) {
     for (const disq of SAMPLE_DISQUALIFIERS) {
-      if (titleLower.includes(disq) || slug.includes(disq)) {
+      if (cleanTitle.includes(disq) || slug.includes(disq)) {
         return false;
       }
     }
@@ -103,7 +110,7 @@ export function isStrictMatch(
 
   // Rule 2: Banadir clone disqualifier for authentic perfumes
   if (!isDupeTarget) {
-    if (slug.includes("banadirfragrance") || titleLower.includes("banadirfragrance")) {
+    if (slug.includes("banadirfragrance") || cleanTitle.includes("banadirfragrance")) {
       return false;
     }
   }
@@ -122,12 +129,12 @@ export function isStrictMatch(
   };
 
   const targetAliases = brandAliases[brandLower] || [brandLower];
-  const brandFound = targetAliases.some(alias => titleLower.includes(alias) || slug.includes(alias.replace(/ /g, "-")));
+  const brandFound = targetAliases.some(alias => cleanTitle.includes(alias) || slug.includes(alias.replace(/ /g, "-")));
   if (!brandFound && !isDupeTarget) {
     return false;
   }
 
-  // Rule 4: Fragrance name tokens check
+  // Rule 4: Fragrance name tokens check - MUST appear in cleanTitle or clean slug (NEVER query string!)
   const stopWords = new Set([
     "eau", "de", "parfum", "edp", "edt", "cologne", "for", "men", "women",
     "man", "woman", "spray", "natural", "pour", "homme", "femme", "flacon",
@@ -147,11 +154,12 @@ export function isStrictMatch(
     if (tok.length <= 2) {
       // Word boundary check for single letters/short tokens (e.g. 'y' in YSL Y)
       const regex = new RegExp(`\\b${tok}\\b`, "i");
-      if (!regex.test(titleLower) && !regex.test(candidateUrl)) {
+      const slugRegex = new RegExp(`(?:^|[/-])${tok}(?:[/-]|$)`, "i");
+      if (!regex.test(cleanTitle) && !slugRegex.test(slug)) {
         return false;
       }
     } else {
-      if (!titleLower.includes(tok) && !candidateUrl.toLowerCase().includes(tok)) {
+      if (!cleanTitle.includes(tok) && !slug.includes(tok)) {
         return false;
       }
     }
@@ -177,7 +185,7 @@ export function isStrictMatch(
         if (!fragLower.includes(sib)) {
           const sibSlug = sib.replace(/ /g, "-");
           const sibRegex = new RegExp(`\\b${sib}\\b`, "i");
-          if (sibRegex.test(titleLower) || slug.includes(sibSlug)) {
+          if (sibRegex.test(cleanTitle) || slug.includes(sibSlug)) {
             return false;
           }
         }
@@ -185,14 +193,41 @@ export function isStrictMatch(
     }
   }
 
+  // Clone line flanker exclusions:
+  if (fragLower.includes("untold")) {
+    if (slug.includes("sillage") || slug.includes("intense") || slug.includes("milestone") || slug.includes("precieux") || slug.includes("iconic")) {
+      return false;
+    }
+  }
+  if (fragLower.includes("the tux")) {
+    if (slug.includes("the-one") || slug.includes("salvo") || slug.includes("fire-place") || slug.includes("the-myth")) {
+      return false;
+    }
+  }
+  if (fragLower.includes("detour noir")) {
+    if (slug.includes("amber-oud") || slug.includes("aqua-dubai")) {
+      return false;
+    }
+  }
+  if (fragLower.includes("asad") && !fragLower.includes("zanzibar")) {
+    if (slug.includes("zanzibar") || slug.includes("amethyst") || slug.includes("qaed-al-fursan")) {
+      return false;
+    }
+  }
+  if (fragLower.includes("khamrah") && !fragLower.includes("dukhan") && !fragLower.includes("qahwa")) {
+    if (slug.includes("dukhan") || slug.includes("qaed-al-fursan")) {
+      return false;
+    }
+  }
+
   // Flanker conflicts
-  if (!fragLower.includes("exclusif") && (titleLower.includes("exclusif") || slug.includes("exclusif"))) {
+  if (!fragLower.includes("exclusif") && (cleanTitle.includes("exclusif") || slug.includes("exclusif"))) {
     return false;
   }
-  if (!fragLower.includes("absolu") && (titleLower.includes("absolu") || slug.includes("absolu"))) {
+  if (!fragLower.includes("absolu") && (cleanTitle.includes("absolu") || slug.includes("absolu"))) {
     return false;
   }
-  if (!fragLower.includes("cologne") && (titleLower.includes("cologne") || slug.includes("-cologne")) && !titleLower.includes("eau de cologne")) {
+  if (!fragLower.includes("cologne") && (cleanTitle.includes("cologne") || slug.includes("-cologne")) && !cleanTitle.includes("eau de cologne")) {
     return false;
   }
 
