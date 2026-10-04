@@ -955,11 +955,11 @@ async def sync_50_catalog():
 
         # 2. Iterate through each fragrance in the 50 catalog
         for idx, item in enumerate(CATALOG_50, 1):
-            bname = item["brand"]
-            fname = item["name"]
-            fnorm = item["normalized"]
-            fseg = item["segment"]
-            fimg = item["image_url"]
+            bname: str = str(item.get("brand") or "")
+            fname: str = str(item.get("name") or "")
+            fnorm: str = str(item.get("normalized") or "")
+            fseg = item.get("segment") or FragranceMarketSegment.designer
+            fimg: str = str(item.get("image_url") or "")
             
             print(f"[{idx}/{len(CATALOG_50)}] Auditing: {bname} - {fname}")
             
@@ -1041,100 +1041,110 @@ async def sync_50_catalog():
                             await session.delete(obs)
                             
             # Add genuine prices
-            for r_norm, p_amt, src_url, vol, pkg in item.get("prices", []):
-                r_obj = retailer_db_map.get(r_norm)
-                if not r_obj:
-                    continue
-                # Find or create variant for vol and pkg
-                var_res = await session.execute(
-                    select(ProductVariant).filter_by(product_id=prod.product_id, volume_ml=float(vol))
-                )
-                var_obj = var_res.scalars().first()
-                if not var_obj:
-                    var_obj = ProductVariant(product_id=prod.product_id, volume_ml=float(vol), package_type=pkg)
-                    session.add(var_obj)
-                    await session.flush()
-                else:
-                    var_obj.package_type = pkg
+            prices_data = item.get("prices")
+            if isinstance(prices_data, list):
+                for p_entry in prices_data:
+                    if isinstance(p_entry, tuple) and len(p_entry) == 5:
+                        r_norm, p_amt, src_url, vol, pkg = p_entry
+                        r_obj = retailer_db_map.get(r_norm)
+                        if not r_obj:
+                            continue
+                        # Find or create variant for vol and pkg
+                        var_res = await session.execute(
+                            select(ProductVariant).filter_by(product_id=prod.product_id, volume_ml=float(vol))
+                        )
+                        var_obj = var_res.scalars().first()
+                        if not var_obj:
+                            var_obj = ProductVariant(product_id=prod.product_id, volume_ml=float(vol), package_type=pkg)
+                            session.add(var_obj)
+                            await session.flush()
+                        else:
+                            var_any: Any = var_obj
+                            var_any.package_type = pkg
 
-                # Check if price observation exists
-                obs_chk = await session.execute(
-                    select(PriceObservation).filter_by(variant_id=var_obj.variant_id, retailer_id=r_obj.retailer_id)
-                )
-                existing_obs = obs_chk.scalars().first()
-                if not existing_obs:
-                    new_obs = PriceObservation(
-                        variant_id=var_obj.variant_id,
-                        retailer_id=r_obj.retailer_id,
-                        currency_code="USD",
-                        price_amount=p_amt,
-                        source_url=src_url
-                    )
-                    session.add(new_obs)
-                else:
-                    existing_obs.price_amount = p_amt
-                    existing_obs.source_url = src_url
+                        # Check if price observation exists
+                        obs_chk = await session.execute(
+                            select(PriceObservation).filter_by(variant_id=var_obj.variant_id, retailer_id=r_obj.retailer_id)
+                        )
+                        existing_obs = obs_chk.scalars().first()
+                        if not existing_obs:
+                            new_obs = PriceObservation(
+                                variant_id=var_obj.variant_id,
+                                retailer_id=r_obj.retailer_id,
+                                currency_code="USD",
+                                price_amount=float(p_amt),
+                                source_url=src_url
+                            )
+                            session.add(new_obs)
+                        else:
+                            obs_any: Any = existing_obs
+                            obs_any.price_amount = float(p_amt)
+                            obs_any.source_url = src_url
 
             # Process Clones / Inspired By section
-            for clone_bname, clone_fname, clone_img in item.get("clones", []):
-                cb_norm = clone_bname.lower().replace(" ", "_").replace("'", "").replace("&", "and")
-                cb_res = await session.execute(select(Brand).filter_by(normalized_name=cb_norm))
-                c_brand = cb_res.scalar_one_or_none()
-                if not c_brand:
-                    c_brand = Brand(name=clone_bname, normalized_name=cb_norm)
-                    session.add(c_brand)
-                    await session.flush()
+            clones_data = item.get("clones")
+            if isinstance(clones_data, list):
+                for c_entry in clones_data:
+                    if isinstance(c_entry, tuple) and len(c_entry) == 3:
+                        clone_bname, clone_fname, clone_img = c_entry
+                        cb_norm = clone_bname.lower().replace(" ", "_").replace("'", "").replace("&", "and")
+                        cb_res = await session.execute(select(Brand).filter_by(normalized_name=cb_norm))
+                        c_brand = cb_res.scalar_one_or_none()
+                        if not c_brand:
+                            c_brand = Brand(name=clone_bname, normalized_name=cb_norm)
+                            session.add(c_brand)
+                            await session.flush()
 
-                c_fnorm = clone_fname.lower().replace(" ", "_").replace("'", "").replace("-", "_")
-                c_dna_res = await session.execute(
-                    select(FragranceDNA).where(
-                        (FragranceDNA.origin_brand_id == c_brand.brand_id) &
-                        ((FragranceDNA.canonical_name.ilike(clone_fname)) | (FragranceDNA.normalized_name == c_fnorm))
-                    )
-                )
-                c_dna = c_dna_res.scalars().first()
-                if not c_dna:
-                    c_dna_res2 = await session.execute(
-                        select(FragranceDNA).where(
-                            (FragranceDNA.canonical_name.ilike(clone_fname)) | (FragranceDNA.normalized_name == c_fnorm)
+                        c_fnorm = clone_fname.lower().replace(" ", "_").replace("'", "").replace("-", "_")
+                        c_dna_res = await session.execute(
+                            select(FragranceDNA).where(
+                                (FragranceDNA.origin_brand_id == c_brand.brand_id) &
+                                ((FragranceDNA.canonical_name.ilike(clone_fname)) | (FragranceDNA.normalized_name == c_fnorm))
+                            )
                         )
-                    )
-                    c_dna = c_dna_res2.scalars().first()
+                        c_dna = c_dna_res.scalars().first()
+                        if not c_dna:
+                            c_dna_res2 = await session.execute(
+                                select(FragranceDNA).where(
+                                    (FragranceDNA.canonical_name.ilike(clone_fname)) | (FragranceDNA.normalized_name == c_fnorm)
+                                )
+                            )
+                            c_dna = c_dna_res2.scalars().first()
 
-                if not c_dna:
-                    c_dna = FragranceDNA(
-                        canonical_name=clone_fname,
-                        normalized_name=c_fnorm,
-                        sort_key=clone_fname,
-                        origin_brand_id=c_brand.brand_id,
-                        market_segment=FragranceMarketSegment.clone,
-                        is_dupe=True,
-                        inspired_by=f"{bname} {fname}",
-                        image_url=clone_img
-                    )
-                    session.add(c_dna)
-                    await session.flush()
-                else:
-                    c_dna_any: Any = c_dna
-                    c_dna_any.image_url = clone_img
-                    c_dna_any.is_dupe = True
-                    c_dna_any.inspired_by = f"{bname} {fname}"
+                        if not c_dna:
+                            c_dna = FragranceDNA(
+                                canonical_name=clone_fname,
+                                normalized_name=c_fnorm,
+                                sort_key=clone_fname,
+                                origin_brand_id=c_brand.brand_id,
+                                market_segment=FragranceMarketSegment.clone,
+                                is_dupe=True,
+                                inspired_by=f"{bname} {fname}",
+                                image_url=clone_img
+                            )
+                            session.add(c_dna)
+                            await session.flush()
+                        else:
+                            c_dna_any: Any = c_dna
+                            c_dna_any.image_url = clone_img
+                            c_dna_any.is_dupe = True
+                            c_dna_any.inspired_by = f"{bname} {fname}"
 
-                # Link in dna_relationship
-                rel_res = await session.execute(
-                    select(DNARelationship).filter_by(
-                        source_dna_id=c_dna.dna_id,
-                        target_dna_id=dna.dna_id,
-                        relationship_type=RelationType.inspired_by
-                    )
-                )
-                if not rel_res.scalar_one_or_none():
-                    session.add(DNARelationship(
-                        source_dna_id=c_dna.dna_id,
-                        target_dna_id=dna.dna_id,
-                        relationship_type=RelationType.inspired_by,
-                        confidence_score=0.95
-                    ))
+                        # Link in dna_relationship
+                        rel_res = await session.execute(
+                            select(DNARelationship).filter_by(
+                                source_dna_id=c_dna.dna_id,
+                                target_dna_id=dna.dna_id,
+                                relationship_type=RelationType.inspired_by
+                            )
+                        )
+                        if not rel_res.scalar_one_or_none():
+                            session.add(DNARelationship(
+                                source_dna_id=c_dna.dna_id,
+                                target_dna_id=dna.dna_id,
+                                relationship_type=RelationType.inspired_by,
+                                confidence_score=0.95
+                            ))
 
         await session.commit()
         print("=== 50 FRAGRANCES AUDIT & SYNC COMPLETED SUCCESSFULLY ===")

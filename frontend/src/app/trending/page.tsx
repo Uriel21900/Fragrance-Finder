@@ -59,6 +59,7 @@ export default function TrendingPage() {
                   name={frag.canonical_name}
                   imageUrl={frag.image_url}
                   marketSegment={frag.market_segment}
+                  gender={frag.gender}
                   price={lowestPrice > 0 ? `$${lowestPrice.toFixed(2)}` : "In Stock"}
                   concentration={conc}
                   isDupe={frag.is_dupe}

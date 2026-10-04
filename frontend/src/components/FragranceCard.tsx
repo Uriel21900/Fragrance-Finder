@@ -18,6 +18,7 @@ interface FragranceCardProps {
   image_url?: string;
   marketSegment?: string;
   market_segment?: string;
+  gender?: string;
   storeCount?: number;
 }
 
@@ -37,12 +38,27 @@ export default function FragranceCard({
   image_url,
   marketSegment,
   market_segment,
+  gender,
   storeCount,
 }: FragranceCardProps) {
   const isDupeActive = Boolean(isDupe ?? is_dupe);
   const targetName = inspiredBy || inspired_by || target || "Target";
   const displayImage = imageUrl || image_url;
   const displaySegment = marketSegment || market_segment;
+
+  const genderLower = gender?.toLowerCase();
+  let genderLabel = "";
+  let genderClass = "";
+  if (genderLower === 'masculine' || genderLower === 'men' || genderLower === 'him') {
+    genderLabel = "Men";
+    genderClass = "bg-sky-500/20 text-sky-300 border-sky-500/40";
+  } else if (genderLower === 'feminine' || genderLower === 'women' || genderLower === 'her') {
+    genderLabel = "Women";
+    genderClass = "bg-rose-500/20 text-rose-300 border-rose-500/40";
+  } else if (genderLower === 'unisex') {
+    genderLabel = "Unisex";
+    genderClass = "bg-purple-500/20 text-purple-300 border-purple-500/40";
+  }
 
   const cardContent = (
     <div className="glass glass-hover rounded-2xl p-4 flex flex-col relative overflow-hidden group cursor-pointer h-full border border-white/10 hover:border-gold/30 transition-all duration-300">
@@ -64,16 +80,23 @@ export default function FragranceCard({
           </div>
         )}
         
-        {/* Market Segment Badge */}
-        {displaySegment && (
-          <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-gold">
-            {displaySegment}
-          </div>
-        )}
+        {/* Badges Container */}
+        <div className="absolute top-2 left-2 flex flex-wrap gap-1.5 items-center z-10 max-w-[70%]">
+          {displaySegment && (
+            <div className="bg-black/75 backdrop-blur-md border border-white/10 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-gold shadow-sm">
+              {displaySegment.replace(/_/g, ' ')}
+            </div>
+          )}
+          {genderLabel && (
+            <div className={`backdrop-blur-md border px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm ${genderClass}`}>
+              {genderLabel}
+            </div>
+          )}
+        </div>
         
         {/* Dupe Badge */}
         {isDupeActive && (
-          <div className="absolute top-2 right-2 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-amber-300 flex items-center gap-1">
+          <div className="absolute top-2 right-2 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase text-amber-300 flex items-center gap-1 z-10">
             <Sparkles size={10} className="text-amber-400" />
             <span>Dupe / Clone</span>
           </div>

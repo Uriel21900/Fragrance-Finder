@@ -10,6 +10,8 @@ export async function GET() {
         d.dna_id,
         d.canonical_name,
         d.image_url,
+        d.gender,
+        d.market_segment,
         b.name as brand_name,
         p.price_amount as sale_price,
         p.source_url,
@@ -30,7 +32,9 @@ export async function GET() {
         dna_id: row.dna_id,
         brand_name: row.brand_name || 'Brand',
         canonical_name: row.canonical_name,
-        image_url: row.image_url
+        image_url: row.image_url,
+        gender: row.gender,
+        market_segment: row.market_segment
       },
       retailer_name: row.retailer_name || 'Retailer',
       original_price: parseFloat(row.sale_price) * 1.25,

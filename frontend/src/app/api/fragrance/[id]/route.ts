@@ -20,6 +20,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         d.inspired_by,
         d.influencer_mentions,
         d.image_url,
+        d.gender,
         b.name as brand_name
       FROM fragrance_dna d
       LEFT JOIN brand b ON d.origin_brand_id = b.brand_id
@@ -123,6 +124,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       brand_name: dna.brand_name || 'Unknown Brand',
       canonical_name: dna.canonical_name,
       market_segment: dna.market_segment,
+      gender: dna.gender,
       first_release_year: dna.first_release_year,
       is_dupe: dna.is_dupe,
       inspired_by: dna.inspired_by,

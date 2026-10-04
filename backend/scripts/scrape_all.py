@@ -187,6 +187,9 @@ async def run_all_scrapers() -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     log_streamer = NeonLogStreamer()
     await log_streamer.connect()
+    if not log_streamer.pool:
+        raise RuntimeError("Failed to connect to Neon database pool.")
+    pool = log_streamer.pool
 
     orchestrator = DomainOrchestrator(TARGET_DOMAINS, log_streamer)
     await log_streamer.start_heartbeat(orchestrator.get_summary_state, interval_sec=15)
@@ -195,7 +198,7 @@ async def run_all_scrapers() -> Dict[str, Any]:
     logger.info(f"=== STARTING 6-HOUR SCRAPING ORCHESTRATION RUN [{run_id}] ACROSS {len(TARGET_DOMAINS)} DOMAINS ===")
 
     # 1. Record initial run record in Neon
-    async with log_streamer.pool.acquire() as conn:
+    async with pool.acquire() as conn:
         await conn.execute(
             """
             INSERT INTO scrape_runs (run_id, started_at, status, total_domains)
@@ -231,7 +234,7 @@ async def run_all_scrapers() -> Dict[str, Any]:
     successful_domains = sum(1 for d in orchestrator.domains.values() if d.status == DomainStatus.COMPLETED)
 
     # 4. Persist domain-level metrics to Neon
-    async with log_streamer.pool.acquire() as conn:
+    async with pool.acquire() as conn:
         for name, d in orchestrator.domains.items():
             duration = (d.ended_at - d.started_at).total_seconds() if d.ended_at and d.started_at else 0
             await conn.execute(

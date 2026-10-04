@@ -41,7 +41,7 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
         if (res.data.image_url) {
           setImgSrc(res.data.image_url);
         } else {
-          setImgSrc("https://images.unsplash.com/photo-1594035910387-fea47794261f?w=800&auto=format&fit=crop&q=80");
+          setImgSrc('');
         }
       } catch (err) {
         console.error("Error fetching fragrance details:", err);
@@ -137,6 +137,20 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
   const lowestPrice = allPrices.length > 0 ? allPrices[0].price_amount : null;
   const highestPrice = allPrices.length > 0 ? allPrices[allPrices.length - 1].price_amount : null;
 
+  const genderLower = fragrance.gender?.toLowerCase();
+  let genderLabel = "";
+  let genderClass = "";
+  if (genderLower === 'masculine' || genderLower === 'men' || genderLower === 'him') {
+    genderLabel = "Men";
+    genderClass = "bg-sky-500/20 text-sky-300 border-sky-500/40";
+  } else if (genderLower === 'feminine' || genderLower === 'women' || genderLower === 'her') {
+    genderLabel = "Women";
+    genderClass = "bg-rose-500/20 text-rose-300 border-rose-500/40";
+  } else if (genderLower === 'unisex') {
+    genderLabel = "Unisex";
+    genderClass = "bg-purple-500/20 text-purple-300 border-purple-500/40";
+  }
+
   return (
     <div className="w-full pb-32">
       {/* Back button */}
@@ -156,18 +170,31 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
             <div className="absolute -inset-1 bg-gradient-to-r from-gold/20 via-amber-500/10 to-transparent rounded-3xl blur-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
             
             <div className="relative aspect-[4/5] w-full overflow-hidden bg-black/40 flex items-center justify-center">
-              <img
-                src={imgSrc}
-                alt={fragrance.canonical_name}
-                onError={() => setImgSrc("https://images.unsplash.com/photo-1594035910387-fea47794261f?w=800&auto=format&fit=crop&q=80")}
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
-              />
+              {imgSrc ? (
+                <img
+                  src={imgSrc}
+                  alt={fragrance.canonical_name}
+                  onError={() => setImgSrc('')}
+                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-white/30 gap-3 p-6 text-center">
+                  <Sparkles size={48} className="text-gold/40" />
+                  <span className="text-sm uppercase tracking-widest font-bold text-white/60">{fragrance.brand_name}</span>
+                  <span className="text-xs text-white/40">{fragrance.canonical_name}</span>
+                </div>
+              )}
               
               {/* Overlay Tags */}
               <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                 <span className="px-3 py-1 bg-black/60 backdrop-blur-md border border-white/15 rounded-full text-xs font-semibold text-gold tracking-wide uppercase">
                   {fragrance.market_segment}
                 </span>
+                {genderLabel && (
+                  <span className={`px-3 py-1 backdrop-blur-md border rounded-full text-xs font-semibold tracking-wide uppercase shadow-sm ${genderClass}`}>
+                    {genderLabel}
+                  </span>
+                )}
                 {fragrance.is_dupe && (
                   <span className="px-3 py-1 bg-amber-500/20 backdrop-blur-md border border-amber-500/40 rounded-full text-xs font-semibold text-amber-300">
                     Inspired Clone
@@ -216,6 +243,11 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
                 <div className="glass px-4 py-2 rounded-xl flex items-center gap-2 text-sm text-white/70">
                   <ShieldCheck size={15} className="text-green-400" />
                   <span>Price Range: <strong className="text-white">${lowestPrice.toFixed(2)}</strong> - <strong className="text-white">${highestPrice.toFixed(2)}</strong></span>
+                </div>
+              )}
+              {genderLabel && (
+                <div className={`glass px-4 py-2 rounded-xl text-sm font-medium border ${genderClass}`}>
+                  Gender: <strong className="text-white">{genderLabel}</strong>
                 </div>
               )}
               {fragrance.first_release_year && (

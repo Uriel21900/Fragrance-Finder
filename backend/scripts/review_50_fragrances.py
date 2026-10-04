@@ -10,6 +10,7 @@ import asyncio
 import os
 import sys
 import re
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 import httpx
 from sqlalchemy import select, delete, update
@@ -178,8 +179,8 @@ async def run_audit():
     
     async with async_session_maker() as session:
         for idx, item in enumerate(CATALOG_50[:50], 1):
-            fname = item["name"]
-            bname = item["brand"]
+            fname: str = str(item.get("name") or "")
+            bname: str = str(item.get("brand") or "")
             
             # Fetch DNA
             stmt = (
@@ -217,16 +218,17 @@ async def run_audit():
             valid_offers = []
             
             for obs, r_name in obs_rows:
-                if not is_url_valid_for_fragrance(obs.source_url, fname, bname, dna.is_dupe):
+                source_u = str(obs.source_url or "")
+                if not is_url_valid_for_fragrance(source_u, fname, bname, bool(dna.is_dupe)):
                     bad_ids.append(obs.price_observation_id)
                 else:
                     # Sanitize URL
-                    clean_u = clean_source_url(obs.source_url)
+                    clean_u = clean_source_url(source_u)
                     if obs.source_url != clean_u:
                         obs.source_url = clean_u
                         session.add(obs)
                     valid_offers.append({
-                        "retailer": r_name or "Retailer",
+                        "retailer": str(r_name) if r_name else "Retailer",
                         "price": float(obs.price_amount),
                         "url": clean_u
                     })
@@ -237,7 +239,8 @@ async def run_audit():
                 print(f"[{idx}] Purged {len(bad_ids)} mismatched prices for {bname} - {fname}")
                 
             # If 0 valid prices remain, seed verified prices from CATALOG_50 or retailer search
-            if not valid_offers and "prices" in item:
+            item_prices = item.get("prices")
+            if not valid_offers and isinstance(item_prices, list):
                 # Find default variant
                 v_stmt = (
                     select(ProductVariant)
@@ -247,35 +250,38 @@ async def run_audit():
                 )
                 variant = (await session.execute(v_stmt)).scalars().first()
                 if variant:
-                    for r_slug, price, u, vol, pkg in item["prices"]:
-                        # find retailer
-                        r_obj = (await session.execute(
-                            select(Retailer).where(Retailer.normalized_name.ilike(f"%{r_slug}%"))
-                        )).scalars().first()
-                        r_id = r_obj.retailer_id if r_obj else None
-                        
-                        clean_u = clean_source_url(u)
-                        new_obs = PriceObservation(
-                            variant_id=variant.variant_id,
-                            retailer_id=r_id,
-                            currency_code="USD",
-                            price_amount=price,
-                            source_url=clean_u,
-                            availability="in_stock"
-                        )
-                        session.add(new_obs)
-                        valid_offers.append({
-                            "retailer": r_slug.capitalize(),
-                            "price": price,
-                            "url": clean_u
-                        })
-                    print(f"[{idx}] Restored {len(item['prices'])} verified prices for {bname} - {fname}")
+                    for p_tuple in item_prices:
+                        if isinstance(p_tuple, tuple) and len(p_tuple) == 5:
+                            r_slug, price, u, vol, pkg = p_tuple
+                            # find retailer
+                            r_obj = (await session.execute(
+                                select(Retailer).where(Retailer.normalized_name.ilike(f"%{r_slug}%"))
+                            )).scalars().first()
+                            r_id = r_obj.retailer_id if r_obj else None
+                            
+                            clean_u = clean_source_url(u)
+                            new_obs = PriceObservation(
+                                variant_id=variant.variant_id,
+                                retailer_id=r_id,
+                                currency_code="USD",
+                                price_amount=float(price),
+                                source_url=clean_u,
+                                availability="in_stock"
+                            )
+                            session.add(new_obs)
+                            valid_offers.append({
+                                "retailer": r_slug.capitalize(),
+                                "price": float(price),
+                                "url": clean_u
+                            })
+                    print(f"[{idx}] Restored {len(item_prices)} verified prices for {bname} - {fname}")
 
             # Deduplicate valid offers for reporting
-            unique_offers = {}
+            unique_offers: dict[tuple[str, str], dict[str, Any]] = {}
             for o in valid_offers:
-                key = (o["retailer"], o["url"])
-                if key not in unique_offers or o["price"] < unique_offers[key]["price"]:
+                key = (str(o["retailer"]), str(o["url"]))
+                o_price = float(o["price"])
+                if key not in unique_offers or o_price < float(unique_offers[key]["price"]):
                     unique_offers[key] = o
                     
             results.append({

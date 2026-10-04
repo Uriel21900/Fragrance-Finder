@@ -55,6 +55,9 @@ export default function AlertsPage() {
                     id={deal.fragrance.dna_id}
                     brand={deal.fragrance.brand_name}
                     name={deal.fragrance.canonical_name}
+                    imageUrl={deal.fragrance.image_url}
+                    gender={deal.fragrance.gender}
+                    marketSegment={deal.fragrance.market_segment}
                     price={`$${deal.sale_price.toFixed(2)}`}
                     concentration="EDP"
                     isDupe={deal.fragrance.is_dupe}

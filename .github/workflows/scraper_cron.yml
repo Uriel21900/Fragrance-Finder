@@ -25,6 +25,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install \
             httpx \
+            curl_cffi \
             beautifulsoup4 \
             asyncpg \
             "sqlalchemy>=2.0" \

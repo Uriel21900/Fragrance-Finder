@@ -28,6 +28,7 @@ export interface FragranceData {
   brand_name: string;
   canonical_name: string;
   market_segment: string;
+  gender?: string;
   first_release_year?: number;
   influencer_mentions?: string;
   is_dupe?: boolean;

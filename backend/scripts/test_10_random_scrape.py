@@ -34,8 +34,8 @@ async def test_10():
         
         async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
             for idx, dna in enumerate(dnas, 1):
-                brand_name = dna.origin_brand.name if dna.origin_brand else "Unknown"
-                frag_name = dna.canonical_name
+                brand_name = str(dna.origin_brand.name) if dna.origin_brand and dna.origin_brand.name else "Unknown"
+                frag_name = str(dna.canonical_name)
                 query = f"{brand_name} {frag_name}".strip()
                 print(f"\n[{idx}/10] Testing: {brand_name} — {frag_name}")
                 print(f"Query: '{query}'")
@@ -44,9 +44,9 @@ async def test_10():
                 for ret in RETAILERS:
                     results = await scrape_shopify_search(client, ret["url"], query)
                     for r in results:
-                        title = r["title"]
-                        url = r["url"]
-                        price = r["price"]
+                        title = str(r.get("title") or "")
+                        url = str(r.get("url") or "")
+                        price = float(r.get("price") or 0.0)
                         
                         # Test if authentic match
                         title_valid = is_authentic_match(title, brand_name, frag_name, False)

@@ -1,7 +1,7 @@
 # setup_task.ps1 - Registers Windows Scheduled Task for 6-hour scraper runs
 $TaskName = "FragranceFinder_Scraper_6Hour"
 $PythonPath = (Get-Command python.exe).Source
-$ScriptPath = "$PSScriptRoot\backend\scripts\scrape_all.py"
+$ScriptPath = "$PSScriptRoot\backend\scripts\run_scheduled_scrapers.py"
 $WorkingDir = "$PSScriptRoot"
 
 Write-Host "Registering Windows Scheduled Task: $TaskName"
@@ -11,7 +11,7 @@ Write-Host "Target Script: $ScriptPath"
 # Trigger: Every 6 hours indefinitely
 $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6)
 
-# Action: Run Python with scrape_all.py
+# Action: Run Python with run_scheduled_scrapers.py
 $Action = New-ScheduledTaskAction -Execute $PythonPath -Argument "$ScriptPath" -WorkingDirectory $WorkingDir
 
 # Settings: Allow on battery, start when available, wake computer, retry on failure
@@ -31,7 +31,8 @@ try {
         -Action $Action `
         -Settings $Settings `
         -Description "Runs Fragrance Finder multi-domain scraper every 6 hours with Neon PostgreSQL telemetry streaming." `
-        -User "$env:USERDOMAIN\$env:USERNAME"
+        -User "$env:USERDOMAIN\$env:USERNAME" `
+        -Force
 
     Write-Host "Task '$TaskName' successfully registered for 6-hour interval execution!" -ForegroundColor Green
 } catch {

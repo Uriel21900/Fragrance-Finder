@@ -3,26 +3,37 @@ import sys
 import asyncio
 import re
 import datetime
+import urllib.parse
 from typing import Any
-from urllib.parse import urlparse
-import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select, update, insert, or_
+from dotenv import load_dotenv
 
+# Ensure backend root is in python path & load environment variables
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(".env")
+
+# Try curl_cffi for Cloudflare / TLS fingerprint bypass; fallback to httpx
+try:
+    from curl_cffi.requests import AsyncSession as ClientSession
+    USING_CURL_CFFI = True
+except ImportError:
+    import httpx
+    ClientSession = httpx.AsyncClient
+    USING_CURL_CFFI = False
+
 from models.schema import (
     FragranceDNA, Brand, FragranceLine, FragranceProduct, ProductVariant, 
     Retailer, PriceObservation, FragranceAlert
 )
 from scrapers.strict_matcher import is_strict_match, clean_source_url
+from scripts.verify_fragrance_list import FRAGRANCE_LIST
 
 def format_async_db_url(raw_url: str | None) -> str:
     if not raw_url or not raw_url.strip():
-        raise RuntimeError(
-            "DATABASE_URL environment variable is not set. "
-            "Add it as a GitHub Actions secret named DATABASE_URL."
-        )
+        return ""
     url = raw_url.strip()
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -38,141 +49,148 @@ def format_async_db_url(raw_url: str | None) -> str:
         url = f"{url}?ssl=require"
     return url
 
-DATABASE_URL = format_async_db_url(os.getenv("DATABASE_URL"))
-engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
-async_session = async_sessionmaker(engine, expire_on_commit=False)
-
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
 }
 
+# Verified high-yield discounters with responsive search endpoints
 RETAILERS = [
-    {"name": "Jomashop", "normalized": "jomashop_com", "url": "https://jomashop.com"},
-    {"name": "FragFlex", "normalized": "fragflex_com", "url": "https://fragflex.com"},
-    {"name": "Labelle Perfumes", "normalized": "labelle_com", "url": "https://labelleperfumes.com"},
-    {"name": "Best Brands Perfume", "normalized": "bestbrandsperfume_com", "url": "https://bestbrandsperfume.com"},
-    {"name": "The Perfume Spot", "normalized": "theperfumespot_com", "url": "https://theperfumespot.com"},
-    {"name": "ReblScents", "normalized": "reblscents_com", "url": "https://reblscents.com"},
     {"name": "Aura Fragrance", "normalized": "aurafragrance_com", "url": "https://aurafragrance.com"},
-    {"name": "Banadir Fragrance", "normalized": "banadirfragrance_com", "url": "https://banadirfragrance.com"},
-    {"name": "Triple Traders", "normalized": "tripletraders_com", "url": "https://tripletraders.com"},
-    {"name": "PerfumeOnline.com", "normalized": "perfumeonline_com", "url": "https://perfumeonline.com"},
-    {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"},
-    {"name": "Aroma Concepts", "normalized": "aromaconcepts_com", "url": "https://aromaconcepts.com"},
-    {"name": "Anau Store", "normalized": "anaustore_com", "url": "https://anaustore.com"},
-    {"name": "LR LUX", "normalized": "lrlux_com", "url": "https://lrlux.com"},
+    {"name": "FragFlex", "normalized": "fragflex_com", "url": "https://fragflex.com"},
     {"name": "BeautyHouse", "normalized": "beautyhouse_com", "url": "https://beautyhouse.com"},
-    {"name": "Gift Express", "normalized": "giftexpress_com", "url": "https://giftexpress.com"},
-    {"name": "Fragrance Shop", "normalized": "fragranceshop_com", "url": "https://fragranceshop.com"},
+    {"name": "PerfumeOnline.com", "normalized": "perfumeonline_com", "url": "https://perfumeonline.com"},
+    {"name": "Labelle Perfumes", "normalized": "labelle_com", "url": "https://labelleperfumes.com"},
+    {"name": "Triple Traders", "normalized": "tripletraders_com", "url": "https://tripletraders.com"},
+    {"name": "ReblScents", "normalized": "reblscents_com", "url": "https://reblscents.com"},
+    {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"},
+    {"name": "Anau Store", "normalized": "anaustore_com", "url": "https://anaustore.com"},
+    {"name": "Aroma Concepts", "normalized": "aromaconcepts_com", "url": "https://aromaconcepts.com"},
 ]
 
-CLONE_DISQUALIFIERS = [
-    "inspired by", "our version of", "impression of", "type of", "dupe of",
-    "perfume oil", "body oil", "pocket spray", "sample vial", "decant",
-    "twist of", "smells like", "fragrance oil", "vial", "sample"
-]
+def clean_query(text: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
-# Short stop-words that appear in many fragrance names and shouldn't count
-# as a match on their own (e.g. "de", "la", "the", "by")
-_NAME_STOP_WORDS = {"de", "la", "le", "les", "du", "the", "by", "for", "and",
-                    "eau", "parfum", "extrait", "cologne", "toilette"}
-
-def _significant_tokens(text: str) -> list[str]:
-    """Return lowercase alphabetic tokens longer than 2 chars, ignoring stop-words."""
-    return [
-        t for t in re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
-        if len(t) > 2 and t not in _NAME_STOP_WORDS
-    ]
-
-def is_authentic_match(title: str, query_brand: str, query_name: str, is_dupe_target: bool) -> bool:
-    title_lower = title.lower()
-
-    # --- 1. Exclude clone/oil disqualifiers for authentic fragrances ---
-    if not is_dupe_target:
-        for disq in CLONE_DISQUALIFIERS:
-            if disq in title_lower:
-                return False
-
-    # --- 2. Brand must be present (with known abbreviation aliases) ---
-    brand_lower = query_brand.lower()
-    brand_found = brand_lower in title_lower
-    if not brand_found:
-        aliases = {
-            "parfums de marly": ["pdm"],
-            "maison francis kurkdjian": ["mfk"],
-            "jo malone": ["jo malone london"],
-            "yves saint laurent": ["ysl"],
-            "maison margiela replica": ["margiela", "replica"],
-        }
-        for canon, alts in aliases.items():
-            if brand_lower == canon:
-                brand_found = any(a in title_lower for a in alts)
-                break
-    if not brand_found:
-        return False
-
-    # --- 3. Fragrance NAME must also be present in the title ---
-    # Require at least half of the significant name tokens to appear in the
-    # title. This catches "Layton" correctly while tolerating minor wording
-    # differences (e.g. "Baccarat Rouge 540" vs "540 Baccarat Rouge").
-    name_tokens = _significant_tokens(query_name)
-    if name_tokens:
-        title_tokens = set(_significant_tokens(title))
-        matched = sum(1 for t in name_tokens if t in title_tokens)
-        required = max(1, len(name_tokens) // 2 + len(name_tokens) % 2)  # ceil(n/2)
-        if matched < required:
-            return False
-
-    return True
-
-async def scrape_shopify_search(client: httpx.AsyncClient, base_url: str, query: str):
-    search_url = f"{base_url}/search/suggest.json?q={query}&resources[type]=product&resources[options][unavailable_products]=hide"
+async def scrape_shopify_search(client: Any, base_url: str, query: str):
+    cleaned = clean_query(query)
+    encoded = urllib.parse.quote_plus(cleaned)
+    search_url = f"{base_url}/search/suggest.json?q={encoded}&resources[type]=product&resources[options][unavailable_products]=hide"
     results = []
+    
+    # 1. Try suggest.json endpoint
     try:
-        resp = await client.get(search_url, headers=HEADERS, timeout=8.0)
+        resp = await client.get(search_url, timeout=7.0)
         if resp.status_code == 200:
-            data = resp.json()
-            products = data.get("resources", {}).get("results", {}).get("products", [])
-            for p in products:
-                title = p.get("title", "")
-                price = float(p.get("price", 0.0))
-                url = p.get("url", "")
-                if url.startswith("/"):
-                    url = f"{base_url}{url}"
-                results.append({"title": title, "price": price, "url": url})
+            ctype = resp.headers.get("content-type", "").lower()
+            if "application/json" in ctype or resp.text.strip().startswith("{"):
+                data = resp.json()
+                products = data.get("resources", {}).get("results", {}).get("products", [])
+                for p in products:
+                    title = p.get("title", "")
+                    price = float(p.get("price", 0.0))
+                    url = p.get("url", "")
+                    if url.startswith("/"):
+                        url = f"{base_url}{url}"
+                    results.append({"title": title, "price": price, "url": url})
+                if results:
+                    return results
     except Exception:
-        # Fallback to HTML search if suggest json is unavailable
-        try:
-            html_url = f"{base_url}/search?q={query}"
-            resp = await client.get(html_url, headers=HEADERS, timeout=8.0)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                items = soup.select('.grid__item, .product-item, .product-card, .card')
-                for item in items[:5]:
-                    title_elem = item.select_one('.title, .product-title, .card__heading, h2, h3, a.product-item__title')
-                    price_elem = item.select_one('.price-item--sale, .price-item, .money, .price')
-                    link_elem = item.select_one('a')
-                    if title_elem and price_elem and link_elem:
-                        t = title_elem.text.strip()
-                        p_match = re.search(r'[\d,\.]+', price_elem.text)
-                        if p_match:
+        pass
+
+    # 2. Fallback to HTML search
+    try:
+        html_url = f"{base_url}/search?q={encoded}"
+        resp = await client.get(html_url, timeout=7.0)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            items = soup.select('.grid__item, .product-item, .product-card, .card, .product-grid-item')
+            for item in items[:6]:
+                title_elem = item.select_one('.title, .product-title, .card__heading, h2, h3, a.product-item__title')
+                price_elem = item.select_one('.price-item--sale, .price-item, .money, .price')
+                link_elem = item.select_one('a')
+                if title_elem and price_elem and link_elem:
+                    t = title_elem.text.strip()
+                    p_match = re.search(r'[\d,\.]+', price_elem.text)
+                    if p_match:
+                        try:
                             pr = float(p_match.group().replace(',', ''))
                             href_val = link_elem.get('href', '')
                             u = str(href_val) if href_val else ''
                             if u.startswith('/'):
                                 u = f"{base_url}{u}"
                             results.append({"title": t, "price": pr, "url": u})
-        except Exception:
-            pass
+                        except ValueError:
+                            pass
+    except Exception:
+        pass
             
     return results
 
+async def check_fragrance(
+    client: Any,
+    retailers: list[dict],
+    retailer_map: dict[str, Any],
+    brand_name: str,
+    dna_name: str,
+    is_dupe: bool,
+    variant_id: Any,
+    dna_id: Any,
+) -> list[dict]:
+    query = f"{brand_name} {dna_name}".strip()
+    matches_found = []
+    
+    for ret in retailers:
+        ret_id = retailer_map.get(ret["name"]) or retailer_map.get(ret["url"])
+        try:
+            matches = await scrape_shopify_search(client, ret["url"], query)
+            for match in matches:
+                is_match, reason = is_strict_match(
+                    candidate_title=str(match["title"]),
+                    candidate_url=str(match["url"]),
+                    candidate_price=float(match["price"]) if match["price"] else None,
+                    target_brand=brand_name,
+                    target_fragrance=dna_name,
+                    is_dupe_target=is_dupe,
+                    require_full_bottle=True
+                )
+                if not is_match:
+                    continue
+                if match["price"] and match["price"] > 10.0:
+                    clean_u = clean_source_url(str(match["url"]))
+                    matches_found.append({
+                        "retailer_name": ret["name"],
+                        "retailer_id": ret_id,
+                        "variant_id": variant_id,
+                        "dna_id": dna_id,
+                        "dna_name": dna_name,
+                        "brand_name": brand_name,
+                        "price": match["price"],
+                        "url": clean_u,
+                    })
+                    break # Recorded best match for this retailer
+            await asyncio.sleep(0.15)
+        except Exception:
+            pass
+
+    return matches_found
+
 async def run_scraper():
-    print("=" * 60)
+    print("=" * 70)
     print(f"STARTING SCHEDULED SCRAPER RUN: {datetime.datetime.now(datetime.timezone.utc).isoformat()}")
-    print("=" * 60)
+    print(f"Engine: {'curl_cffi (Chrome TLS Impersonation)' if USING_CURL_CFFI else 'httpx'}")
+    print("=" * 70)
+
+    db_url = format_async_db_url(os.getenv("DATABASE_URL"))
+    if not db_url:
+        print("[!] ERROR: DATABASE_URL environment variable is not set.")
+        print("[!] For GitHub Actions, add it to repository secrets as DATABASE_URL.")
+        print("[!] For local runs, ensure DATABASE_URL is set in backend/.env.")
+        sys.exit(0)
+
+    engine = create_async_engine(db_url, echo=False, pool_pre_ping=True)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
     
     async with async_session() as session:
         # 1. Fetch all existing retailers and build lookup map
@@ -208,18 +226,29 @@ async def run_scraper():
             retailer_map[ret["name"]] = r_obj.retailer_id
             retailer_map[ret["url"]] = r_obj.retailer_id
             retailer_map[norm] = r_obj.retailer_id
-            print(f"Mapped retailer: {ret['name']} -> {r_obj.retailer_id}")
             
         await session.commit()
+        print(f"Loaded {len(retailer_map)} retailer mappings across {len(RETAILERS)} discounters.")
         
-        # 2. Query tracked fragrances joined with primary variant
+        # 2. Query clean fragrances joined with primary variant
         stmt = (
             select(FragranceDNA, Brand, ProductVariant)
             .join(Brand, FragranceDNA.origin_brand_id == Brand.brand_id)
             .join(FragranceLine, FragranceLine.dna_id == FragranceDNA.dna_id)
             .join(FragranceProduct, FragranceProduct.line_id == FragranceLine.line_id)
             .join(ProductVariant, ProductVariant.product_id == FragranceProduct.product_id)
-            .order_by(FragranceDNA.canonical_name)
+            .where(
+                FragranceDNA.canonical_name.not_ilike("!%"),
+                FragranceDNA.canonical_name.not_ilike("$%"),
+                FragranceDNA.canonical_name.not_ilike("Sale price%"),
+                FragranceDNA.canonical_name.not_ilike("%Regular price%"),
+                FragranceDNA.canonical_name.not_ilike("%Price range%"),
+                FragranceDNA.canonical_name.not_ilike("%CAD%"),
+                FragranceDNA.canonical_name.not_ilike("%USD%"),
+                FragranceDNA.canonical_name.not_ilike("%http%"),
+                Brand.name.not_ilike("%.com%"),
+                Brand.name.not_ilike("%.ca%"),
+            )
         )
         rows = (await session.execute(stmt)).all()
         
@@ -230,69 +259,80 @@ async def run_scraper():
                 unique_fragrances[dna.dna_id] = (dna, brand, variant)
                 
         fragrance_list = list(unique_fragrances.values())
-        print(f"Found {len(fragrance_list)} unique fragrances with variants to track.")
+
+        # Sort priority: 50 canonical fragrances FIRST, then genuine originals, then clones
+        def sort_priority(item):
+            dna, brand, variant = item
+            c_name = str(dna.canonical_name).strip().lower()
+            b_name = str(brand.name).strip().lower()
+            for idx, (canon_f, canon_b) in enumerate(FRAGRANCE_LIST):
+                if canon_f.lower() == c_name and (canon_b.lower() in b_name or b_name in canon_b.lower()):
+                    return (0, idx)
+            if dna.is_original_dna:
+                return (1, str(dna.canonical_name).lower())
+            return (2, str(dna.canonical_name).lower())
+
+        fragrance_list.sort(key=sort_priority)
+        print(f"Found {len(fragrance_list)} clean catalog fragrances with variants to track.")
+        print(f"Prioritizing the {len(FRAGRANCE_LIST)} canonical fragrances first.")
         
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            updated_count = 0
-            
+        total_observations = 0
+
+        # Initialize client session
+        client_kwargs = {"impersonate": "chrome"} if USING_CURL_CFFI else {"headers": HEADERS, "follow_redirects": True}
+        async with ClientSession(**client_kwargs) as client:
             for idx, (dna, brand, variant) in enumerate(fragrance_list, 1):
-                query = f"{brand.name} {dna.canonical_name}".strip()
-                
-                for ret in RETAILERS:
-                    try:
-                        matches = await scrape_shopify_search(client, ret["url"], query)
-                        for match in matches:
-                            is_match, reason = is_strict_match(
-                                candidate_title=str(match["title"]),
-                                candidate_url=str(match["url"]),
-                                candidate_price=float(match["price"]) if match["price"] else None,
-                                target_brand=str(brand.name),
-                                target_fragrance=str(dna.canonical_name),
-                                is_dupe_target=bool(dna.is_dupe),
-                                require_full_bottle=True
-                            )
-                            if not is_match:
-                                continue
-                            if match["price"] and match["price"] > 10.0:
-                                    now = datetime.datetime.now(datetime.timezone.utc)
-                                    clean_u = clean_source_url(str(match["url"]))
-                                    obs = PriceObservation(
-                                        variant_id=variant.variant_id,
-                                        retailer_id=retailer_map.get(ret["name"]) or retailer_map.get(ret["url"]),
-                                        observed_at=now,
-                                        captured_at=now,
-                                        price_amount=match["price"],
-                                        currency_code="USD",
-                                        source_url=clean_u,
-                                        availability="in_stock"
-                                    )
-                                    session.add(obs)
-                                    updated_count += 1
-                                    print(f"  [{idx}/{len(fragrance_list)}] [+] {ret['name']}: {dna.canonical_name} -> ${match['price']:.2f}", flush=True)
-                                    
-                                    # Check price drop alerts
-                                    alert_stmt = select(FragranceAlert).where(
-                                        FragranceAlert.dna_id == dna.dna_id,
-                                        FragranceAlert.target_price >= match["price"]
-                                    )
-                                    alerts = (await session.execute(alert_stmt)).scalars().all()
-                                    for al in alerts:
-                                        print(f"🚨 PRICE ALERT: {dna.canonical_name} dropped to ${match['price']:.2f} for {al.email}", flush=True)
-                                    
-                                    break # Recorded best match for this retailer
-                    except Exception as err:
-                        pass
-                        
-                if updated_count > 0 and updated_count % 10 == 0:
+                matches = await check_fragrance(
+                    client=client,
+                    retailers=RETAILERS,
+                    retailer_map=retailer_map,
+                    brand_name=str(brand.name),
+                    dna_name=str(dna.canonical_name),
+                    is_dupe=bool(dna.is_dupe),
+                    variant_id=variant.variant_id,
+                    dna_id=dna.dna_id,
+                )
+
+                for m in matches:
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    obs = PriceObservation(
+                        variant_id=m["variant_id"],
+                        retailer_id=m["retailer_id"],
+                        observed_at=now,
+                        captured_at=now,
+                        price_amount=m["price"],
+                        currency_code="USD",
+                        source_url=m["url"],
+                        availability="in_stock"
+                    )
+                    session.add(obs)
+                    total_observations += 1
+                    print(f"  [{idx:03d}/{len(fragrance_list)}] [+] {m['retailer_name']}: {m['brand_name']} - {m['dna_name']} -> ${m['price']:.2f}", flush=True)
+
+                    # Check price alerts
+                    alert_stmt = select(FragranceAlert).where(
+                        FragranceAlert.dna_id == m["dna_id"],
+                        FragranceAlert.target_price >= m["price"]
+                    )
+                    alerts = (await session.execute(alert_stmt)).scalars().all()
+                    for al in alerts:
+                        print(f"    🚨 PRICE ALERT: {m['dna_name']} dropped to ${m['price']:.2f} for {al.email}", flush=True)
+
+                if not matches and (idx <= 50 or idx % 10 == 0):
+                    print(f"  [{idx:03d}/{len(fragrance_list)}] Searched: {brand.name} - {dna.canonical_name} (0 in-stock discounter offers)", flush=True)
+
+                # Commit batch after each fragrance that found matches or every 3 fragrances
+                if matches or idx % 3 == 0:
                     await session.commit()
-            
-            # Final commit for remaining updates
+
+            # Final commit
             await session.commit()
-                
-        print("=" * 60)
-        print(f"COMPLETED SCRAPER RUN: Recorded {updated_count} new price observations.")
-        print("=" * 60)
+
+        print("=" * 70)
+        print(f"COMPLETED SCRAPER RUN: Recorded {total_observations} new price observations.")
+        print("=" * 70)
+
+    await engine.dispose()
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
-

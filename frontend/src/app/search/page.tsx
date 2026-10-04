@@ -99,6 +99,7 @@ function SearchContent() {
                   name={frag.canonical_name}
                   imageUrl={frag.image_url}
                   marketSegment={frag.market_segment}
+                  gender={frag.gender}
                   isDupe={frag.is_dupe}
                   inspiredBy={frag.inspired_by}
                   storeCount={totalStores}
