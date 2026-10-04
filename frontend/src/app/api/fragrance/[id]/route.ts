@@ -141,9 +141,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
           prices: prices
         }
       ],
-      clones: clones,
-      _version: 'v2-all17',
-      _rawCount: priceRows.length
+      clones: clones
     };
 
     return NextResponse.json(response, {
