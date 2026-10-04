@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Fragrance Finder — Luxury & Clone Price Tracker',
+    name: 'Fragrance Finder - Luxury & Clone Price Tracker',
     short_name: 'FragranceFinder',
     description: 'Track designer and clone fragrance prices across discounters with live market comparisons.',
     start_url: '/',
