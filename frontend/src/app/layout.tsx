@@ -1,26 +1,51 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
+import InstallPwaPrompt from "@/components/InstallPwaPrompt";
+import BottomMobileNav from "@/components/BottomMobileNav";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"] });
+
+export const viewport: Viewport = {
+  themeColor: "#08080a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: {
     template: "%s | Fragrance Finder",
-    default: "Fragrance Finder - Discover & Track the Best Perfumes",
+    default: "Fragrance Finder — Luxury & Clone Price Tracker",
   },
   description: "Discover the global fragrance market. Track prices, find your signature scent, explore sustainable perfume ingredients, and uncover the best organic fragrance blends for perfumes.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Fragrance Finder",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   keywords: [
     "fragrance finder",
-    "best organic fragrance blends for perfumes",
-    "DIY customized perfume oils",
-    "sustainable perfume ingredients for natural scents",
-    "perfume raw materials marketplace for unique blends",
-    "crafting personalized fragrance blends",
-    "best-selling perfume oils",
-    "scent combinations for bespoke perfumes",
-    "how to create your own signature scent"
+    "perfume price tracker",
+    "best clone fragrances",
+    "cologne discounter comparison",
+    "creed aventus clones",
+    "baccarat rouge 540 dupes",
+    "niche perfumes",
   ],
 };
 
@@ -32,8 +57,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.className} antialiased min-h-screen flex flex-col`}>
+        <ServiceWorkerRegister />
+        
         <header className="sticky top-0 z-50 glass border-b-0 rounded-none bg-background/60">
-          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
               <span className="text-xl font-bold tracking-tighter">
                 FRAGRANCE<span className="text-gradient-gold">FINDER</span>
@@ -46,7 +73,7 @@ export default function RootLayout({
               <Link href="/alerts" className="hover:text-white transition-colors">Alerts</Link>
             </nav>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button className="text-sm font-medium hover:text-white/80 transition-colors">
                 Log in
               </button>
@@ -57,9 +84,12 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-12">
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12 pb-24 md:pb-12">
           {children}
         </main>
+
+        <BottomMobileNav />
+        <InstallPwaPrompt />
       </body>
     </html>
   );

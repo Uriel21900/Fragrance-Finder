@@ -10,6 +10,11 @@
   --card-border: rgba(255, 255, 255, 0.08);
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -17,6 +22,7 @@ body {
     radial-gradient(circle at 15% 50%, rgba(30, 25, 45, 0.4), transparent 25%),
     radial-gradient(circle at 85% 30%, rgba(20, 25, 40, 0.4), transparent 25%);
   background-attachment: fixed;
+  overscroll-behavior-y: none;
 }
 
 @layer utilities {
