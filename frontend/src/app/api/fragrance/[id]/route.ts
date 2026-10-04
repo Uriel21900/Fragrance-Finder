@@ -67,7 +67,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         dna.brand_name || '',
         dna.canonical_name || '',
         Boolean(dna.is_dupe),
-        true
+        true,
+        dna.gender || ''
       );
       if (!isMatch) continue;
 
@@ -82,7 +83,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       }
 
       const cleanUrl = cleanSourceUrl(row.source_url);
-      const key = `${rName}-${cleanUrl}`;
+      const key = cleanUrl;
       if (!latestPrices.has(key) || new Date(row.captured_at) > new Date(latestPrices.get(key).captured_at)) {
         latestPrices.set(key, {
           price_observation_id: row.price_observation_id,

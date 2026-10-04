@@ -79,6 +79,7 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
         const url = new URL(price.source_url);
         let host = url.hostname.replace(/^www\./, '').toLowerCase();
         if (host === 'perfumeonline.ca') host = 'perfumeonline.com';
+        if (host === 'labelleperfumes.com') host = 'labelle.com';
         return host;
       }
     } catch {}
@@ -86,6 +87,7 @@ export default function FragranceDetail({ params }: { params: { id: string } }) 
       let r = price.retailer_name.toLowerCase().replace(/\s+/g, '');
       if (!r.includes('.')) r += '.com';
       if (r === 'perfumeonline.ca') r = 'perfumeonline.com';
+      if (r === 'labelleperfumes.com' || r.includes('labelle')) r = 'labelle.com';
       return r;
     }
     return 'Direct Retailer';

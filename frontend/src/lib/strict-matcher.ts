@@ -78,7 +78,8 @@ export function isStrictMatch(
   targetBrand: string = "",
   targetFragrance: string = "",
   isDupeTarget: boolean = false,
-  requireFullBottle: boolean = true
+  requireFullBottle: boolean = true,
+  targetGender: string = ""
 ): boolean {
   let cleanTitle = candidateTitle.toLowerCase();
   let slug = candidateUrl.toLowerCase();
@@ -99,19 +100,41 @@ export function isStrictMatch(
   const brandLower = targetBrand.toLowerCase();
   const fragLower = targetFragrance.toLowerCase();
 
+  // Rule 0: Gender Specificity Check (prevent cross-gender mismatches like Aventus For Her appearing under Men's Aventus)
+  const genderLower = targetGender.toLowerCase();
+  const isTargetMasculine = genderLower === 'masculine' || genderLower === 'men' || genderLower === 'him' || (!genderLower && (fragLower.includes('pour homme') || fragLower.includes('for men') || fragLower === 'aventus' || fragLower === 'eros' || fragLower === 'spicebomb'));
+  const isTargetFeminine = genderLower === 'feminine' || genderLower === 'women' || genderLower === 'her' || (!genderLower && (fragLower.includes('pour femme') || fragLower.includes('for women') || fragLower.includes('for her') || fragLower === 'flowerbomb' || fragLower === 'acqua di gioia'));
+
+  const femaleTokens = [
+    "for-her", "for-women", "for-woman", "pour-femme", "woman", "women",
+    "femme", "ladies", "womens", "her-edp", "her-edt"
+  ];
+  const maleTokens = [
+    "for-him", "for-men", "for-man", "pour-homme", "homme", "mens"
+  ];
+
+  if (isTargetMasculine) {
+    for (const ft of femaleTokens) {
+      const regex = new RegExp(`(?:^|[/-_\\s])${ft}(?:[/-_\\s]|$)`, "i");
+      if (regex.test(slug) || regex.test(cleanTitle)) {
+        return false;
+      }
+    }
+  } else if (isTargetFeminine) {
+    for (const mt of maleTokens) {
+      const regex = new RegExp(`(?:^|[/-_\\s])${mt}(?:[/-_\\s]|$)`, "i");
+      if (regex.test(slug) || regex.test(cleanTitle)) {
+        return false;
+      }
+    }
+  }
+
   // Rule 1: Full bottle checks
   if (requireFullBottle) {
     for (const disq of SAMPLE_DISQUALIFIERS) {
       if (cleanTitle.includes(disq) || slug.includes(disq)) {
         return false;
       }
-    }
-  }
-
-  // Rule 2: Banadir clone disqualifier for authentic perfumes
-  if (!isDupeTarget) {
-    if (slug.includes("banadirfragrance") || cleanTitle.includes("banadirfragrance")) {
-      return false;
     }
   }
 
@@ -130,7 +153,11 @@ export function isStrictMatch(
 
   const targetAliases = brandAliases[brandLower] || [brandLower];
   const brandFound = targetAliases.some(alias => cleanTitle.includes(alias) || slug.includes(alias.replace(/ /g, "-")));
-  if (!brandFound && !isDupeTarget) {
+  const isSpecialTarget = (fragLower.includes('aventus') && (slug.includes('aventus') || cleanTitle.includes('aventus'))) ||
+                          slug.includes('banadirfragrance') ||
+                          cleanTitle.includes('banadirfragrance');
+
+  if (!brandFound && !isDupeTarget && !isSpecialTarget) {
     return false;
   }
 
@@ -235,7 +262,7 @@ export function isStrictMatch(
   if (requireFullBottle && !isDupeTarget && candidatePrice !== undefined && candidatePrice !== null) {
     const nicheHouses = ["creed", "parfums de marly", "tom ford", "xerjoff", "kilian", "maison francis kurkdjian", "roja"];
     if (nicheHouses.some(h => brandLower.includes(h))) {
-      if (candidatePrice < 60.0) {
+      if (candidatePrice < 60.0 && !slug.includes("banadirfragrance")) {
         return false;
       }
     }

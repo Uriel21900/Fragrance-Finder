@@ -1,31 +1,72 @@
 import asyncio
 import os
 import sys
+import asyncpg
+from dotenv import load_dotenv
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from database import async_session_maker
-from models.schema import FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, PriceObservation, Retailer
-from sqlalchemy import select
+load_dotenv("backend/.env")
+load_dotenv(".env")
+if hasattr(sys.stdout, 'reconfigure'):
+    getattr(sys.stdout, 'reconfigure')(encoding='utf-8')
 
-async def inspect():
-    async with async_session_maker() as session:
-        dna = (await session.execute(select(FragranceDNA).where(FragranceDNA.canonical_name == "Aventus"))).scalar_one_or_none()
-        print(f"Aventus DNA: {dna.dna_id} | Image: {dna.image_url}")
-        lines = (await session.execute(select(FragranceLine).where(FragranceLine.dna_id == dna.dna_id))).scalars().all()
-        for line in lines:
-            prods = (await session.execute(select(FragranceProduct).where(FragranceProduct.line_id == line.line_id))).scalars().all()
-            for prod in prods:
-                vars = (await session.execute(select(ProductVariant).where(ProductVariant.product_id == prod.product_id))).scalars().all()
-                for v in vars:
-                    print(f"Variant: {v.variant_id} | {v.volume_ml}ml {v.package_type}")
-                    obs_list = (await session.execute(
-                        select(PriceObservation, Retailer)
-                        .outerjoin(Retailer, PriceObservation.retailer_id == Retailer.retailer_id)
-                        .where(PriceObservation.variant_id == v.variant_id)
-                    )).all()
-                    for obs, r in obs_list:
-                        rname = r.name if r else "None"
-                        print(f"  Obs {obs.price_observation_id}: ${obs.price_amount} | {rname} | {obs.source_url}")
+async def main():
+    db_url = os.getenv("DATABASE_URL")
+    conn = await asyncpg.connect(db_url)
+
+    print("=== AVENTUS FRAGRANCE DNAs ===")
+    dnas = await conn.fetch("""
+        SELECT d.dna_id, d.canonical_name, d.gender, d.image_url, b.name as brand_name
+        FROM fragrance_dna d
+        LEFT JOIN brand b ON d.origin_brand_id = b.brand_id
+        WHERE d.canonical_name ILIKE '%aventus%'
+        ORDER BY d.canonical_name;
+    """)
+    for d in dnas:
+        print(f"DNA ID: {d['dna_id']} | Brand: {d['brand_name']} | Name: {d['canonical_name']} | Gender: {d['gender']}")
+
+    print("\n=== PRICES ATTACHED TO CREED AVENTUS (Masculine) ===")
+    aventus_dna = await conn.fetchrow("""
+        SELECT dna_id FROM fragrance_dna WHERE canonical_name = 'Aventus' LIMIT 1;
+    """)
+    if aventus_dna:
+        dna_id = aventus_dna['dna_id']
+        prices = await conn.fetch("""
+            SELECT p.price_amount, p.currency_code, p.source_url, r.name as retailer_name,
+                   v.volume_ml, v.package_type, fp.product_id, l.name as line_name
+            FROM fragrance_line l
+            JOIN fragrance_product fp ON l.line_id = fp.line_id
+            JOIN product_variant v ON fp.product_id = v.product_id
+            JOIN price_observation p ON v.variant_id = p.variant_id
+            LEFT JOIN retailer r ON p.retailer_id = r.retailer_id
+            WHERE l.dna_id = $1
+            ORDER BY p.price_amount ASC;
+        """, dna_id)
+        print(f"Total prices for Creed Aventus ({dna_id}): {len(prices)}")
+        for p in prices:
+            print(f"  ${p['price_amount']} | {p['retailer_name']} | {p['volume_ml']}ml | {p['source_url']}")
+
+    print("\n=== PRICES ATTACHED TO AVENTUS FOR HER ===")
+    her_dna = await conn.fetchrow("""
+        SELECT dna_id FROM fragrance_dna WHERE canonical_name = 'Aventus for Her' LIMIT 1;
+    """)
+    if her_dna:
+        dna_id = her_dna['dna_id']
+        prices = await conn.fetch("""
+            SELECT p.price_amount, p.currency_code, p.source_url, r.name as retailer_name,
+                   v.volume_ml, v.package_type
+            FROM fragrance_line l
+            JOIN fragrance_product fp ON l.line_id = fp.line_id
+            JOIN product_variant v ON fp.product_id = v.product_id
+            JOIN price_observation p ON v.variant_id = p.variant_id
+            LEFT JOIN retailer r ON p.retailer_id = r.retailer_id
+            WHERE l.dna_id = $1
+            ORDER BY p.price_amount ASC;
+        """, dna_id)
+        print(f"Total prices for Aventus for Her ({dna_id}): {len(prices)}")
+        for p in prices:
+            print(f"  ${p['price_amount']} | {p['retailer_name']} | {p['source_url']}")
+
+    await conn.close()
 
 if __name__ == "__main__":
-    asyncio.run(inspect())
+    asyncio.run(main())
