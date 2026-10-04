@@ -452,6 +452,17 @@ def normalize_key(text_val: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", text_val.strip().lower()).strip("_")
     return cleaned if cleaned else "unknown"
 
+def infer_gender(text_val: str) -> str:
+    """Infer gender classification from fragrance name."""
+    if not text_val:
+        return "unisex"
+    n = text_val.lower()
+    if any(k in n for k in ['for men', 'for him', 'pour homme', 'eau de homme', 'edp man', 'edt man', ' for man', 'men spray', 'men edp', 'men edt', 'homme']):
+        return 'masculine'
+    if any(k in n for k in ['for women', 'for her', 'pour femme', 'eau de femme', 'edp woman', 'edt woman', ' for woman', 'women spray', 'ladies', 'women edp', 'women edt', 'femme']):
+        return 'feminine'
+    return 'unisex'
+
 
 class NeonDatabaseSync:
     """High-performance batch upsert engine into Neon PostgreSQL."""
@@ -526,18 +537,20 @@ class NeonDatabaseSync:
                     # 4. Upsert Fragrance DNA
                     dna_name = item.product_name
                     dna_norm = normalize_key(dna_name)
+                    inferred_gender = infer_gender(dna_name)
                     dna_id = await conn.fetchval("""
                         INSERT INTO fragrance_dna (
                             dna_id, canonical_name, normalized_name, origin_brand_id,
                             market_segment, is_original_dna, is_dupe, inspired_by,
-                            image_url, created_at, updated_at
+                            image_url, gender, created_at, updated_at
                         )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
                         ON CONFLICT (origin_brand_id, normalized_name)
                         DO UPDATE SET
                             is_dupe = EXCLUDED.is_dupe,
                             inspired_by = COALESCE(EXCLUDED.inspired_by, fragrance_dna.inspired_by),
                             image_url = COALESCE(EXCLUDED.image_url, fragrance_dna.image_url),
+                            gender = COALESCE(fragrance_dna.gender, EXCLUDED.gender),
                             updated_at = NOW()
                         RETURNING dna_id;
                     """,
@@ -549,7 +562,8 @@ class NeonDatabaseSync:
                         not item.is_dupe,
                         item.is_dupe,
                         item.inspired_by,
-                        item.image_url
+                        item.image_url,
+                        inferred_gender
                     )
                     stats["dnas_upserted"] += 1
 
@@ -557,13 +571,15 @@ class NeonDatabaseSync:
                     line_norm = f"{dna_norm}_line"
                     line_id = await conn.fetchval("""
                         INSERT INTO fragrance_line (
-                            line_id, brand_id, dna_id, name, normalized_name, created_at, updated_at
+                            line_id, brand_id, dna_id, name, normalized_name, marketing_gender, created_at, updated_at
                         )
-                        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                        VALUES ($1, $2, $3, $4, $5, $6::fragrance_gender_marketing, NOW(), NOW())
                         ON CONFLICT (brand_id, normalized_name)
-                        DO UPDATE SET updated_at = NOW()
+                        DO UPDATE SET 
+                            marketing_gender = COALESCE(fragrance_line.marketing_gender, EXCLUDED.marketing_gender),
+                            updated_at = NOW()
                         RETURNING line_id;
-                    """, uuid.uuid4(), brand_id, dna_id, dna_name, line_norm)
+                    """, uuid.uuid4(), brand_id, dna_id, dna_name, line_norm, inferred_gender)
 
                     # 6. Upsert Fragrance Product
                     product_id = await conn.fetchval("""

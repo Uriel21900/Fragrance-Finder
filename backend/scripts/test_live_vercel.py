@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.parse
 import json
 
 for q in ["Aventus", "Light Blue", "Acqua di Gio", "Eros"]:

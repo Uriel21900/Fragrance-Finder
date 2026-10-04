@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv("backend/.env")
 load_dotenv(".env")
-sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stdout, 'reconfigure'):
+    getattr(sys.stdout, 'reconfigure')(encoding='utf-8')
 
 async def main():
     db_url = os.getenv("DATABASE_URL")
