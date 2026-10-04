@@ -3,6 +3,8 @@ import { sql } from '@/lib/db';
 import { isStrictMatch, cleanSourceUrl } from '@/lib/strict-matcher';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const { id } = params;
@@ -139,10 +141,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
           prices: prices
         }
       ],
-      clones: clones
+      clones: clones,
+      _version: 'v2-all17',
+      _rawCount: priceRows.length
     };
 
-    return NextResponse.json(response);
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+      }
+    });
   } catch (error: any) {
     console.error('Error fetching fragrance detail:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
