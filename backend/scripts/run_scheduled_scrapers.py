@@ -3,6 +3,7 @@ import sys
 import asyncio
 import re
 import datetime
+import uuid
 import urllib.parse
 from typing import Any
 from bs4 import BeautifulSoup
@@ -41,6 +42,8 @@ def format_async_db_url(raw_url: str | None) -> str:
     if not raw_url or not raw_url.strip():
         raw_url = FALLBACK_DATABASE_URL
     url = raw_url.strip().strip("'").strip('"')
+    if not url.startswith("postgres"):
+        url = FALLBACK_DATABASE_URL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
@@ -307,12 +310,14 @@ async def run_scraper():
                 for m in matches:
                     now = datetime.datetime.now(datetime.timezone.utc)
                     obs = PriceObservation(
+                        price_observation_id=uuid.uuid4(),
                         variant_id=m["variant_id"],
                         retailer_id=m["retailer_id"],
                         observed_at=now,
                         captured_at=now,
                         price_amount=m["price"],
                         currency_code="USD",
+                        condition="new",
                         source_url=m["url"],
                         availability="in_stock"
                     )
