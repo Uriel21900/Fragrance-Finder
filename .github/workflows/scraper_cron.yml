@@ -46,6 +46,53 @@ jobs:
           PYTHONPATH: "backend:."
           PYTHONUNBUFFERED: "1"
         run: |
-          export DATABASE_URL="${DATABASE_URL:-postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require}"
+          if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "true" ] || [[ "$DATABASE_URL" != postgres* ]]; then
+            export DATABASE_URL="postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
+          fi
+
+          echo "Running pre-flight verification..."
+          python -c "
+          import sys, os
+          sys.path.append('backend')
+          try:
+              import models.schema
+              import scrapers.strict_matcher
+              import scripts.verify_fragrance_list
+              from scripts.run_scheduled_scrapers import format_async_db_url
+              print('::notice::Pre-flight: Imports successful')
+          except Exception as e:
+              import traceback
+              tb = traceback.format_exc().replace('\n', '%0A').replace('\r', '')
+              print(f'::error title=Preflight Import Error::{tb}')
+              sys.exit(1)
+          "
+
+          echo "Running pre-flight database connection test..."
+          python -c "
+          import sys, os, asyncio
+          sys.path.append('backend')
+          from scripts.run_scheduled_scrapers import format_async_db_url
+          from sqlalchemy.ext.asyncio import create_async_engine
+          from sqlalchemy import text
+
+          async def test_db():
+              url = format_async_db_url(os.getenv('DATABASE_URL'))
+              engine = create_async_engine(url)
+              async with engine.connect() as conn:
+                  res = await conn.execute(text('SELECT count(*) FROM fragrance_dna;'))
+                  cnt = res.scalar()
+                  print(f'::notice::Pre-flight DB test passed! Fragrance DNA count: {cnt}')
+              await engine.dispose()
+
+          try:
+              asyncio.run(test_db())
+          except Exception as e:
+              import traceback
+              tb = traceback.format_exc().replace('\n', '%0A').replace('\r', '')
+              print(f'::error title=Preflight DB Test Error::{tb}')
+              sys.exit(1)
+          "
+
+          echo "Starting full scheduled scraper run..."
           python backend/scripts/run_scheduled_scrapers.py
 

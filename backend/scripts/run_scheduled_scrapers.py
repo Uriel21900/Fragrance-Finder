@@ -20,7 +20,7 @@ load_dotenv(".env")
 try:
     from curl_cffi.requests import AsyncSession as ClientSession
     USING_CURL_CFFI = True
-except ImportError:
+except Exception:
     import httpx
     ClientSession = httpx.AsyncClient
     USING_CURL_CFFI = False
@@ -355,6 +355,9 @@ if __name__ == "__main__":
         asyncio.run(run_scraper())
     except Exception as e:
         import traceback
+        tb = traceback.format_exc()
         print(f"[!] FATAL ERROR in run_scraper: {e}", file=sys.stderr)
         traceback.print_exc()
+        escaped_tb = tb.replace("\r", "").replace("\n", "%0A")
+        print(f"::error title=Fatal Scraper Error::{escaped_tb}")
         sys.exit(1)
