@@ -11,8 +11,9 @@ import os
 import sys
 import io
 
-# Force UTF-8 output on Windows to handle special chars
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+# Safe UTF-8 configuration without detaching stdout buffer
+if hasattr(sys.stdout, 'reconfigure'):
+    getattr(sys.stdout, 'reconfigure')(encoding='utf-8', errors='replace')
 
 from dotenv import load_dotenv
 
@@ -77,6 +78,36 @@ FRAGRANCE_LIST = [
     ("Whiff of Waffle Cone", "Imaginary Authors"),
     ("Lira", "Xerjoff"),
     ("Cheirosa 62", "Sol de Janeiro"),
+    # Iconic Modern Classics & Trending Additions
+    ("Aventus", "Creed"),
+    ("Apple Brandy on the Rocks", "Kilian"),
+    ("Torino21", "Xerjoff"),
+    ("Naxos", "Xerjoff"),
+    ("Erba Pura", "Xerjoff"),
+    ("MYSLF", "Yves Saint Laurent"),
+    ("Le Male Elixir", "Jean Paul Gaultier"),
+    ("Althair", "Parfums de Marly"),
+    ("Layton", "Parfums de Marly"),
+    ("Stronger With You", "Giorgio Armani"),
+    ("Valentino Uomo Born in Roma", "Valentino"),
+    ("Valentino Donna Born in Roma", "Valentino"),
+    ("Luna Rossa Ocean", "Prada"),
+    ("Imagination", "Louis Vuitton"),
+    ("Pacific Chill", "Louis Vuitton"),
+    ("L'Immensité", "Louis Vuitton"),
+    ("Ani", "Nishane"),
+    ("Paragon", "Initio Parfums Prives"),
+    ("Side Effect", "Initio Parfums Prives"),
+    ("Oud for Greatness", "Initio Parfums Prives"),
+    ("Gris Charnel", "BDK Parfums"),
+    ("Hawas for Men", "Rasasi"),
+    # Trending Clones (is_dupe=True)
+    ("Liquid Brun", "French Avenue", True),
+    ("Spectre Ghost", "French Avenue", True),
+    ("Vintage Radio", "Lattafa", True),
+    ("Liam Grey", "Lattafa", True),
+    ("Khamrah", "Lattafa", True),
+    ("Club De Nuit Intense Man", "Armaf", True),
 ]
 
 # ── Query that mirrors the frontend /api/search route ───────────────────────
@@ -136,7 +167,8 @@ async def verify_all():
         wrong_brand    = 0
         issues         = []
 
-        for idx, (name, brand) in enumerate(FRAGRANCE_LIST, 1):
+        for idx, item in enumerate(FRAGRANCE_LIST, 1):
+            name, brand = item[0], item[1]
             pattern = f"%{name}%"
             rows = await conn.fetch(SEARCH_SQL, pattern, name)
 
@@ -185,6 +217,7 @@ async def verify_all():
             # ── Check 4: Cross-contamination — did we get the WRONG name? ─
             cross_contaminated = not name_ok
 
+            expect_dupe = item[2] if len(item) > 2 else False
             if cross_contaminated:
                 status = "WRONG RESULT"
                 note   = f"Got '{db_name}' instead of '{name}'"
@@ -195,10 +228,14 @@ async def verify_all():
                 note   = f"Brand is '{db_brand}', expected '{brand}'"
                 wrong_brand += 1
                 issues.append((idx, name, brand, status, note))
-            elif is_dupe:
+            elif is_dupe and not expect_dupe:
                 status = "DUPE LEAK"
                 note   = f"Marked is_dupe=True, inspired_by='{insp}' — should be original"
                 dupe_leak += 1
+                issues.append((idx, name, brand, status, note))
+            elif not is_dupe and expect_dupe:
+                status = "ORIGINAL LEAK"
+                note   = f"Marked is_dupe=False — expected clone"
                 issues.append((idx, name, brand, status, note))
             else:
                 status = "OK"

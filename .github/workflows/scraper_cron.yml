@@ -18,7 +18,6 @@ jobs:
         uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.12'
-          cache: 'pip'
 
       - name: Install Dependencies
         run: |
@@ -35,7 +34,8 @@ jobs:
 
       - name: Run Scheduled Scraper & Price Tracker
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require' }}
+          PYTHONPATH: "backend:."
           PYTHONUNBUFFERED: "1"
         run: |
           python backend/scripts/run_scheduled_scrapers.py

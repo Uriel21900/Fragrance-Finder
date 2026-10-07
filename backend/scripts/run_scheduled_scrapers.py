@@ -31,10 +31,16 @@ from models.schema import (
 from scrapers.strict_matcher import is_strict_match, clean_source_url
 from scripts.verify_fragrance_list import FRAGRANCE_LIST
 
+# Safe UTF-8 configuration without detaching stdout buffer
+if hasattr(sys.stdout, 'reconfigure'):
+    getattr(sys.stdout, 'reconfigure')(encoding='utf-8', errors='replace')
+
+FALLBACK_DATABASE_URL = "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
 def format_async_db_url(raw_url: str | None) -> str:
     if not raw_url or not raw_url.strip():
-        return ""
-    url = raw_url.strip()
+        raw_url = FALLBACK_DATABASE_URL
+    url = raw_url.strip().strip("'").strip('"')
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
@@ -67,6 +73,9 @@ RETAILERS = [
     {"name": "Shop Aromatix", "normalized": "shoparomatix_com", "url": "https://shoparomatix.com"},
     {"name": "Anau Store", "normalized": "anaustore_com", "url": "https://anaustore.com"},
     {"name": "Aroma Concepts", "normalized": "aromaconcepts_com", "url": "https://aromaconcepts.com"},
+    {"name": "Banadir Fragrance", "normalized": "banadirfragrance_com", "url": "https://banadirfragrance.com"},
+    {"name": "LrLux", "normalized": "lrlux_com", "url": "https://lrlux.com"},
+    {"name": "GiftExpress", "normalized": "giftexpress_com", "url": "https://www.giftexpress.com"},
 ]
 
 def clean_query(text: str) -> str:
@@ -138,7 +147,8 @@ async def check_fragrance(
     variant_id: Any,
     dna_id: Any,
 ) -> list[dict]:
-    query = f"{brand_name} {dna_name}".strip()
+    clean_brand = "Initio" if "initio" in brand_name.lower() else ("Maison Margiela" if "margiela" in brand_name.lower() else brand_name)
+    query = f"{clean_brand} {dna_name}".strip()
     matches_found = []
     
     for ret in retailers:
@@ -265,7 +275,8 @@ async def run_scraper():
             dna, brand, variant = item
             c_name = str(dna.canonical_name).strip().lower()
             b_name = str(brand.name).strip().lower()
-            for idx, (canon_f, canon_b) in enumerate(FRAGRANCE_LIST):
+            for idx, f_item in enumerate(FRAGRANCE_LIST):
+                canon_f, canon_b = f_item[0], f_item[1]
                 if canon_f.lower() == c_name and (canon_b.lower() in b_name or b_name in canon_b.lower()):
                     return (0, idx)
             if dna.is_original_dna:
@@ -335,4 +346,10 @@ async def run_scraper():
     await engine.dispose()
 
 if __name__ == "__main__":
-    asyncio.run(run_scraper())
+    try:
+        asyncio.run(run_scraper())
+    except Exception as e:
+        import traceback
+        print(f"[!] FATAL ERROR in run_scraper: {e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)

@@ -96,12 +96,16 @@ def is_strict_match(
     if "is_dupe" in kwargs:
         is_dupe_target = bool(kwargs["is_dupe"])
 
-    title_lower = candidate_title.lower()
+    import unicodedata
+    def strip_accents(text: str) -> str:
+        return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
+
+    title_lower = strip_accents(candidate_title)
     parsed_url = urlparse(candidate_url)
-    slug = parsed_url.path.lower()
+    slug = strip_accents(parsed_url.path)
     
-    brand_lower = target_brand.lower()
-    frag_lower = target_fragrance.lower()
+    brand_lower = strip_accents(target_brand)
+    frag_lower = strip_accents(target_fragrance)
 
     # Rule A2: Full Bottle Validation
     if require_full_bottle:
@@ -135,7 +139,26 @@ def is_strict_match(
         "chanel": ["chanel"],
         "dior": ["dior", "christian dior"],
         "xerjoff": ["xerjoff", "casamorati", "sospiro"],
-        "kilian": ["kilian", "by kilian"]
+        "kilian": ["kilian", "by kilian"],
+        "initio parfums prives": ["initio", "initio parfums", "initio parfums prives"],
+        "initio": ["initio", "initio parfums", "initio parfums prives"],
+        "bdk parfums": ["bdk", "bdk parfums"],
+        "jean paul gaultier": ["jean paul gaultier", "jpg", "gaultier"],
+        "giorgio armani": ["giorgio armani", "armani", "emporio armani"],
+        "louis vuitton": ["louis vuitton", "lv"],
+        "comme des garcons": ["comme des garcons", "cdg"],
+        "hermes": ["hermes"],
+        "chloe": ["chloe"],
+        "maison margiela replica": ["maison margiela", "margiela", "replica"],
+        "maison margiela": ["maison margiela", "margiela", "replica"],
+        "viktor & rolf": ["viktor & rolf", "viktor and rolf", "viktor &amp; rolf", "viktor rolf"],
+        "dolce & gabbana": ["dolce & gabbana", "dolce and gabbana", "d&g", "dolce &amp; gabbana"],
+        "french avenue": ["french avenue", "fragrance world"],
+        "lattafa": ["lattafa", "lattafa perfumes"],
+        "armaf": ["armaf", "sterling"],
+        "rasasi": ["rasasi"],
+        "valentino": ["valentino"],
+        "prada": ["prada"],
     }
     
     target_aliases = brand_aliases.get(brand_lower, [brand_lower])
