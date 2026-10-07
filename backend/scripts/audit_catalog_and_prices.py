@@ -32,7 +32,10 @@ async def main():
     print(f"Total Fragrances with 0 prices: {total_dna - dna_with_prices}")
     
     # Check 50 Canonical Fragrances
-    from verify_fragrance_list import FRAGRANCE_LIST
+    try:
+        from scripts.verify_fragrance_list import FRAGRANCE_LIST
+    except ImportError:
+        from backend.scripts.verify_fragrance_list import FRAGRANCE_LIST
     print(f"\nChecking {len(FRAGRANCE_LIST)} Canonical Fragrances:")
     missing_canonical = []
     canonical_without_prices = []

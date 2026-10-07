@@ -16,13 +16,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv(".env")
 
+import httpx
+
 # Try curl_cffi for Cloudflare / TLS fingerprint bypass; fallback to httpx
 try:
-    from curl_cffi.requests import AsyncSession as ClientSession
+    from curl_cffi.requests import AsyncSession as ClientSession  # type: ignore
     USING_CURL_CFFI = True
 except Exception:
-    import httpx
-    ClientSession = httpx.AsyncClient
+    ClientSession = httpx.AsyncClient  # type: ignore
     USING_CURL_CFFI = False
 
 from models.schema import (
@@ -293,8 +294,12 @@ async def run_scraper():
         total_observations = 0
 
         # Initialize client session
-        client_kwargs = {"impersonate": "chrome"} if USING_CURL_CFFI else {"headers": HEADERS, "follow_redirects": True}
-        async with ClientSession(**client_kwargs) as client:
+        if USING_CURL_CFFI:
+            client_ctx = ClientSession(impersonate="chrome")  # type: ignore
+        else:
+            client_ctx = httpx.AsyncClient(headers=HEADERS, follow_redirects=True)
+
+        async with client_ctx as client:
             for idx, (dna, brand, variant) in enumerate(fragrance_list, 1):
                 matches = await check_fragrance(
                     client=client,
