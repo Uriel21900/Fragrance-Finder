@@ -83,7 +83,7 @@ async def run_hourly_check():
             LIMIT 5;
         """)
         
-        report = []
+        report: list[str] = []
         report.append("=" * 70)
         report.append(f"⏱️ HOURLY FRAGRANCE AUDIT REPORT: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         report.append("=" * 70)
