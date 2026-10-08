@@ -1,8 +1,30 @@
 import { neon } from '@neondatabase/serverless';
 
-// Fallback to placeholder connection string during build-time page analysis if DATABASE_URL is not set
-const connectionString = 
-  process.env.DATABASE_URL || 
-  'postgresql://placeholder_user:placeholder_pass@placeholder.neon.tech/neondb?sslmode=require';
+let client: ReturnType<typeof neon> | null = null;
 
-export const sql = neon(connectionString);
+function getClient(): ReturnType<typeof neon> {
+  if (!client) {
+    const url = process.env.DATABASE_URL;
+    if (!url) {
+      throw new Error(
+        'DATABASE_URL environment variable is not defined. Please configure it in your environment.'
+      );
+    }
+    client = neon(url);
+  }
+  return client;
+}
+
+// Lazy Proxy: Prevents early initialization failure during build-time page analysis
+// and completely eliminates hardcoded/dummy connection strings from source code.
+export const sql = new Proxy((() => {}) as unknown as ReturnType<typeof neon>, {
+  apply(_target, thisArg, argArray) {
+    return Reflect.apply(getClient(), thisArg, argArray);
+  },
+  get(_target, prop, receiver) {
+    const c = getClient();
+    const val = Reflect.get(c, prop, receiver);
+    return typeof val === 'function' ? val.bind(c) : val;
+  },
+});
+
