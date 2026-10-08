@@ -483,10 +483,9 @@ async def run_community_discovery(target_houses: Optional[List[str]] = None) -> 
             all_discovered_dupes.append(c)
 
     # 5. Synchronize with Neon PostgreSQL
-    db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-    )
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is required.")
     if db_url.startswith("postgresql+asyncpg://"):
         db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
     elif db_url.startswith("postgres://"):

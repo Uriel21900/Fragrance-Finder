@@ -7,7 +7,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     getattr(sys.stdout, 'reconfigure')(encoding='utf-8', errors='replace')
 
 load_dotenv("backend/.env")
-FALLBACK_URL = "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
+load_dotenv(".env")
 
 SEED_DATA = [
     # Originals
@@ -262,7 +262,10 @@ SEED_DATA = [
 ]
 
 async def seed():
-    conn = await asyncpg.connect(os.getenv("DATABASE_URL") or FALLBACK_URL)
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is required.")
+    conn = await asyncpg.connect(db_url)
     print("Connected to database.")
 
     dna_cache = {}

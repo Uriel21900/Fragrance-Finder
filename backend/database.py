@@ -12,11 +12,9 @@ from sqlalchemy.ext.asyncio import (
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 load_dotenv(".env")
 
-DEFAULT_NEON_URL = (
-    "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-)
-
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_NEON_URL)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL:
+    DATABASE_URL = ""
 
 def get_sqlalchemy_async_url(raw_url: str) -> str:
     """Format connection URL for SQLAlchemy asyncpg engine."""

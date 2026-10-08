@@ -19,13 +19,11 @@ load_dotenv(".env")
 
 logger = logging.getLogger("NeonClient")
 
-DEFAULT_NEON_URL = (
-    "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-)
-
 class NeonLogStreamer:
     def __init__(self, dsn: Optional[str] = None):
-        raw_dsn = dsn or os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL") or DEFAULT_NEON_URL
+        raw_dsn = dsn or os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL")
+        if not raw_dsn:
+            raw_dsn = ""
         if raw_dsn.startswith("postgresql+asyncpg://"):
             raw_dsn = raw_dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
         elif raw_dsn.startswith("postgres://"):

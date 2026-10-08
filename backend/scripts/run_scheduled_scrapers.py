@@ -37,14 +37,12 @@ from scripts.verify_fragrance_list import FRAGRANCE_LIST
 if hasattr(sys.stdout, 'reconfigure'):
     getattr(sys.stdout, 'reconfigure')(encoding='utf-8', errors='replace')
 
-FALLBACK_DATABASE_URL = "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-
 def format_async_db_url(raw_url: str | None) -> str:
     if not raw_url or not raw_url.strip():
-        raw_url = FALLBACK_DATABASE_URL
+        raise ValueError("DATABASE_URL environment variable is required. Please configure it in .env or GitHub Secrets.")
     url = raw_url.strip().strip("'").strip('"')
     if not url.startswith("postgres"):
-        url = FALLBACK_DATABASE_URL
+        raise ValueError("DATABASE_URL must start with 'postgres://' or 'postgresql://'.")
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:

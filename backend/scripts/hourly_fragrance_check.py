@@ -19,12 +19,10 @@ from dotenv import load_dotenv
 load_dotenv("backend/.env")
 load_dotenv(".env")
 
-FALLBACK_DATABASE_URL = "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-
 def get_db_url() -> str:
     raw = os.getenv("DATABASE_URL")
     if not raw or not raw.strip() or not raw.strip().startswith("postgres"):
-        return FALLBACK_DATABASE_URL
+        raise ValueError("DATABASE_URL environment variable is required. Please set it in backend/.env")
     return raw.strip().strip("'").strip('"')
 
 async def run_hourly_check():

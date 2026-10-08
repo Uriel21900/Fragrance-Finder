@@ -47,7 +47,8 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "true" ] || [[ "$DATABASE_URL" != postgres* ]]; then
-            export DATABASE_URL="postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
+            echo "::error::DATABASE_URL secret is missing or invalid in repository secrets. Please configure DATABASE_URL in Settings -> Secrets and variables -> Actions."
+            exit 1
           fi
 
           echo "Running pre-flight verification..."

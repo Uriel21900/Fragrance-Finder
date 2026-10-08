@@ -56,10 +56,9 @@ class VerificationResult(BaseModel):
 
 def get_database_url() -> str:
     """Retrieve and sanitize DATABASE_URL for asyncpg."""
-    url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require"
-    )
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        raise ValueError("DATABASE_URL environment variable is required.")
     # Convert postgresql+asyncpg:// or postgres:// to postgresql:// for asyncpg
     if url.startswith("postgresql+asyncpg://"):
         url = url.replace("postgresql+asyncpg://", "postgresql://", 1)

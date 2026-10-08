@@ -1,14 +1,27 @@
 import asyncio
 import os
 import sys
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select, delete
 
-LOCAL_DB_URL = "postgresql+asyncpg://user:password@localhost:5433/fragrance_finder"
-NEON_DB_URL = "postgresql+asyncpg://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?ssl=require"
+load_dotenv("backend/.env")
+load_dotenv(".env")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.schema import FragranceDNA, FragranceLine, FragranceProduct, ProductVariant, PriceObservation
+
+def get_db_url() -> str:
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        raise ValueError("DATABASE_URL environment variable is required.")
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if "sslmode=require" in url:
+        url = url.replace("sslmode=require", "ssl=require")
+    return url
 
 async def fix_tf_price(db_url: str, name: str):
     engine = create_async_engine(db_url, echo=False)
@@ -32,10 +45,10 @@ async def fix_tf_price(db_url: str, name: str):
             res = await session.execute(d_stmt)
             print(f"Deleted {res.rowcount} anomalous low prices on TF Tobacco Vanille in {name}")
             await session.commit()
+    await engine.dispose()
 
 async def main():
-    await fix_tf_price(LOCAL_DB_URL, "Local")
-    await fix_tf_price(NEON_DB_URL, "Neon")
+    await fix_tf_price(get_db_url(), "Neon")
 
 if __name__ == '__main__':
     asyncio.run(main())

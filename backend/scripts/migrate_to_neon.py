@@ -11,8 +11,22 @@ from models.schema import (
     DNARelationship
 )
 
-LOCAL_DB_URL = "postgresql+asyncpg://user:password@localhost:5433/fragrance_finder"
-NEON_DB_URL = "postgresql+asyncpg://neondb_owner:npg_iN45StWGXmpK@ep-winter-surf-ay718z8s-pooler.c-5.us-east-2.aws.neon.tech/neondb?ssl=require"
+from dotenv import load_dotenv
+load_dotenv("backend/.env")
+load_dotenv(".env")
+
+LOCAL_DB_URL = os.getenv("LOCAL_DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5433/fragrance_finder")
+raw_neon = os.getenv("DATABASE_URL", "")
+if not raw_neon:
+    raw_neon = "postgresql+asyncpg://dummy:dummy@localhost:5432/dummy"
+if raw_neon.startswith("postgres://"):
+    raw_neon = raw_neon.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_neon.startswith("postgresql://") and "+asyncpg" not in raw_neon:
+    raw_neon = raw_neon.replace("postgresql://", "postgresql+asyncpg://", 1)
+if "sslmode=require" in raw_neon:
+    raw_neon = raw_neon.replace("sslmode=require", "ssl=require")
+
+NEON_DB_URL = raw_neon
 
 local_engine = create_async_engine(LOCAL_DB_URL, echo=False)
 local_session = async_sessionmaker(local_engine, expire_on_commit=False)
