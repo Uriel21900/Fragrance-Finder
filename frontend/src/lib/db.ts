@@ -1,9 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 
-const connectionString = process.env.DATABASE_URL;
+// Fallback to placeholder connection string during build-time page analysis if DATABASE_URL is not set
+const connectionString = 
+  process.env.DATABASE_URL || 
+  'postgresql://placeholder_user:placeholder_pass@placeholder.neon.tech/neondb?sslmode=require';
 
-if (!connectionString) {
-  console.warn('[db.ts] WARNING: DATABASE_URL environment variable is not defined.');
-}
-
-export const sql = neon(connectionString || '');
+export const sql = neon(connectionString);
